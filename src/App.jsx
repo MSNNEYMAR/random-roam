@@ -156,9 +156,10 @@ export default function App() {
   // ==================== 渲染 ====================
   return (
     <div className="relative h-full w-full max-w-lg md:max-w-2xl lg:max-w-4xl mx-auto overflow-hidden">
-      <div className="hidden md:block absolute inset-y-0 -left-32 w-32 bg-gradient-to-r from-amber-400/[0.02] to-transparent pointer-events-none" />
-      <div className="hidden md:block absolute inset-y-0 -right-32 w-32 bg-gradient-to-l from-violet-400/[0.02] to-transparent pointer-events-none" />
+      <div className="hidden md:block absolute inset-y-0 -left-32 w-32 bg-gradient-to-r from-indigo-400/[0.03] to-transparent pointer-events-none" />
+      <div className="hidden md:block absolute inset-y-0 -right-32 w-32 bg-gradient-to-l from-violet-400/[0.03] to-transparent pointer-events-none" />
       <div className="ambient-bg" />
+      <div className="ambient-bg-orb" style={{ left: "55%", top: "30%", background: "radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.18), rgba(139, 92, 246, 0.06) 35%, transparent 70%)" }} />
 
       <div className="relative z-10 h-full">
         {(page === 'home' || page === 'loading') && (

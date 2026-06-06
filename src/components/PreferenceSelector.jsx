@@ -263,16 +263,16 @@ export default function PreferenceSelector({ onConfirm, onBack }) {
             : 'rgba(255,255,255,0.03)',
           border: '1px solid rgba(255,255,255,0.08)',
           boxShadow: animReady
-            ? '0 0 40px rgba(250,204,21,0.08)'
-            : '0 0 60px rgba(250,204,21,0.04)',
+            ? '0 0 40px rgba(99,102,241,0.08)'
+            : '0 0 60px rgba(99,102,241,0.04)',
         }}
       >
         <div
-          className="absolute inset-0 rounded-full border border-amber-400/15 animate-ping"
+          className="absolute inset-0 rounded-full border border-indigo-400/15 animate-ping"
           style={{ animationDuration: '3s' }}
         />
         <div
-          className="absolute rounded-full border border-amber-400/10 animate-ping"
+          className="absolute rounded-full border border-indigo-400/10 animate-ping"
           style={{
             inset: '-6px',
             animationDuration: '3s',
@@ -281,10 +281,10 @@ export default function PreferenceSelector({ onConfirm, onBack }) {
         />
 
         {animReady ? (
-          <Sparkles size={Math.round(iconSize * 1.3)} className="text-amber-300/70" />
+          <Sparkles size={Math.round(iconSize * 1.3)} className="text-indigo-300/70" />
         ) : (
           <>
-            <Footprints size={28} className="text-amber-300/70" />
+            <Footprints size={28} className="text-indigo-300/70" />
             <span className="text-white/70 text-lg md:text-xl font-medium tracking-widest ml-1">
               开始漫游
             </span>
@@ -386,7 +386,7 @@ export default function PreferenceSelector({ onConfirm, onBack }) {
             transition-all duration-300
           "
         >
-          <Zap size={16} className="text-amber-400 md:!w-5 md:!h-5" />
+          <Zap size={16} className="text-indigo-400 md:!w-5 md:!h-5" />
           <span className="text-white/80 text-sm md:text-base tracking-widest font-medium">
             生成路线
           </span>

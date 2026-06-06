@@ -100,8 +100,8 @@ export default function HomePage({ onStartRoam, isLoading, locationInfo, userCoo
         <div className="flex flex-col items-center gap-6 md:gap-8 animate-fade-in w-full max-w-sm">
           {/* 图标 */}
           <div className="relative">
-            <div className="absolute inset-0 bg-amber-400/20 rounded-full blur-3xl animate-breathe" />
-            <Search size={48} className="text-amber-300/60 relative z-10 md:!w-14 md:!h-14" strokeWidth={1} />
+            <div className="absolute inset-0 bg-indigo-400/20 rounded-full blur-3xl animate-breathe" />
+            <Search size={48} className="text-indigo-300/60 relative z-10 md:!w-14 md:!h-14" strokeWidth={1} />
           </div>
 
           <div className="text-center">
@@ -130,7 +130,7 @@ export default function HomePage({ onStartRoam, isLoading, locationInfo, userCoo
                   bg-white/[0.04] border border-white/[0.08]
                   text-white/80 text-sm md:text-base
                   placeholder:text-white/15
-                  focus:outline-none focus:border-amber-400/30 focus:bg-white/[0.06]
+                  focus:outline-none focus:border-indigo-400/30 focus:bg-white/[0.06]
                   transition-all duration-300
                 "
               />
@@ -159,9 +159,9 @@ export default function HomePage({ onStartRoam, isLoading, locationInfo, userCoo
                 type="submit"
                 className="
                   flex-1 py-2.5 rounded-xl
-                  bg-amber-400/10 border border-amber-400/20
-                  text-amber-300/80 text-sm font-medium
-                  hover:bg-amber-400/15 hover:text-amber-300
+                  bg-indigo-400/10 border border-indigo-400/20
+                  text-indigo-300/80 text-sm font-medium
+                  hover:bg-indigo-400/15 hover:text-indigo-300
                   active:scale-[0.98] transition-all duration-300
                 "
               >
@@ -207,15 +207,15 @@ export default function HomePage({ onStartRoam, isLoading, locationInfo, userCoo
 
         <div className="flex flex-col items-center gap-6 md:gap-8 animate-fade-in">
           <div className="relative">
-            <div className="absolute inset-0 bg-amber-400/20 rounded-full blur-3xl animate-breathe" />
+            <div className="absolute inset-0 bg-indigo-400/20 rounded-full blur-3xl animate-breathe" />
             <Compass
               size={80}
-              className="text-amber-300/60 relative z-10 animate-[spin_8s_linear_infinite] md:!w-24 md:!h-24"
+              className="text-indigo-300/60 relative z-10 animate-[spin_8s_linear_infinite] md:!w-24 md:!h-24"
               strokeWidth={1}
             />
           </div>
           <div className="flex items-center gap-3">
-            <Loader2 size={28} className="text-amber-400 animate-spin md:!w-8 md:!h-8" />
+            <Loader2 size={28} className="text-indigo-400 animate-spin md:!w-8 md:!h-8" />
             <span className="text-white/50 text-lg md:text-xl tracking-wider">正在生成路线</span>
           </div>
           <p className="text-white/20 text-xs md:text-sm tracking-wider">根据你的偏好定制中...</p>
@@ -250,7 +250,7 @@ export default function HomePage({ onStartRoam, isLoading, locationInfo, userCoo
         {locationDenied && (
           <button
             onClick={() => setPhase('citySearch')}
-            className="ml-1 text-amber-400/50 hover:text-amber-400/80 text-xs underline underline-offset-2 transition-colors"
+            className="ml-1 text-indigo-400/50 hover:text-indigo-400/80 text-xs underline underline-offset-2 transition-colors"
           >
             手动输入
           </button>
@@ -261,10 +261,10 @@ export default function HomePage({ onStartRoam, isLoading, locationInfo, userCoo
       <div className="flex flex-col items-center gap-8 md:gap-10 animate-fade-in">
         {/* 图标 */}
         <div className="relative">
-          <div className="absolute inset-0 bg-amber-400/20 rounded-full blur-3xl animate-breathe" />
+          <div className="absolute inset-0 bg-indigo-400/20 rounded-full blur-3xl animate-breathe" />
           <Compass
             size={72}
-            className="text-amber-300/80 relative z-10 md:!w-24 md:!h-24"
+            className="text-indigo-300/80 relative z-10 md:!w-24 md:!h-24"
             strokeWidth={1}
           />
         </div>
@@ -272,7 +272,7 @@ export default function HomePage({ onStartRoam, isLoading, locationInfo, userCoo
         {/* 标题 */}
         <h1 className="text-5xl md:text-7xl font-display font-bold tracking-widest text-white/90">
           {displayText}
-          <span className="inline-block w-[2px] h-10 md:h-14 bg-amber-400/60 ml-1 align-middle animate-pulse" />
+          <span className="inline-block w-[2px] h-10 md:h-14 bg-indigo-400/60 ml-1 align-middle animate-pulse" />
         </h1>
         <p className="text-white/30 text-sm md:text-base -mt-4 tracking-wider font-light">
           RandomRoam
@@ -293,20 +293,40 @@ export default function HomePage({ onStartRoam, isLoading, locationInfo, userCoo
             btn-glow group relative mt-4 md:mt-6
             flex flex-col items-center justify-center
             w-44 h-44 md:w-52 md:h-52 rounded-full
-            transition-all duration-500
-            bg-white/[0.03] hover:bg-white/[0.06] active:scale-95
-            border border-white/[0.06] hover:border-white/[0.12]
+            transition-all duration-500 ease-out
+            bg-white/[0.04] hover:bg-white/[0.08] active:scale-95
+            border border-white/[0.08] hover:border-white/[0.14]
           `}
+          style={{
+            boxShadow: '0 0 30px rgba(139, 92, 246, 0.08), 0 0 80px rgba(99, 102, 241, 0.04)',
+          }}
         >
-          <div className="absolute inset-0 rounded-full border border-amber-400/10 animate-ping [animation-duration:3s]" />
-          <div className="absolute -inset-3 rounded-full border border-amber-400/5 animate-ping [animation-duration:3s] [animation-delay:0.5s]" />
+          {/* 呼吸光晕环 */}
+          <div
+            className="absolute inset-[-2px] rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-700"
+            style={{
+              background: 'conic-gradient(from 0deg, rgba(139,92,246,0.15), rgba(250,204,21,0.1), rgba(236,72,153,0.15), rgba(99,102,241,0.1), rgba(139,92,246,0.15))',
+              filter: 'blur(8px)',
+            }}
+          />
+          <div className="btn-breathe-ring absolute inset-0 rounded-full border border-indigo-400/10" />
+          <div className="absolute inset-[-10px] rounded-full border border-indigo-400/5 animate-ping [animation-duration:3.5s]" />
 
-          <Footprints size={28} className="text-amber-300/70 group-hover:text-amber-300 transition-colors duration-500 md:!w-8 md:!h-8" />
-          <span className="text-white/70 text-lg md:text-xl font-medium tracking-widest mt-1 group-hover:text-white/90 transition-colors duration-500">
+          <Footprints
+            size={28}
+            className="text-indigo-300/80 group-hover:text-indigo-300 transition-all duration-500 group-hover:scale-110 md:!w-8 md:!h-8 relative z-10"
+          />
+          <span className="text-white/65 text-lg md:text-xl font-medium tracking-widest mt-1 group-hover:text-white/85 transition-colors duration-500 relative z-10">
             开始漫游
           </span>
-          <Sparkles size={12} className="text-amber-400/40 absolute top-8 right-8 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-          <Navigation size={12} className="text-amber-400/40 absolute bottom-8 left-8 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+          <Sparkles
+            size={12}
+            className="text-indigo-400/30 absolute top-8 right-8 opacity-0 group-hover:opacity-80 transition-all duration-500 group-hover:scale-125"
+          />
+          <Navigation
+            size={12}
+            className="text-indigo-400/30 absolute bottom-8 left-8 opacity-0 group-hover:opacity-80 transition-all duration-500 group-hover:scale-125"
+          />
         </button>
 
         {/* 底部提示 */}
@@ -317,7 +337,7 @@ export default function HomePage({ onStartRoam, isLoading, locationInfo, userCoo
 
       {/* --- 底部安全区 --- */}
       <div className="absolute bottom-8 text-white/10 text-[10px] md:text-xs">
-        RandomRoam v0.2
+        RandomRoam v0.5
       </div>
     </div>
   )

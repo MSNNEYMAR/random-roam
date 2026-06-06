@@ -15,102 +15,119 @@ html, body, #root {
 }
 
 body {
-  background: #0f0f1a;
+  /* Deep-sea blue → dusk purple gradient */
+  background: #0a0a1a;
   color: #e8e8ec;
   font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-/* ========== 背景氛围层 ========== */
+/* ========== 氛围背景层 — 深海蓝→暮紫渐变 + 浮游光球 ========== */
 .ambient-bg {
   position: fixed;
   inset: 0;
   z-index: 0;
   overflow: hidden;
+  background:
+    /* 基础渐变：深海蓝 → 暮紫 → 深靛 */
+    linear-gradient(160deg, #0b0d2e 0%, #12103a 20%, #1a1035 40%, #1a0e2e 60%, #100e24 80%, #0a0a1a 100%);
 }
 
+/* 浮游光球 orb-1: 靛蓝光晕，左上 */
 .ambient-bg::before {
   content: '';
   position: absolute;
-  inset: -50%;
-  background:
-    radial-gradient(ellipse 80% 60% at 30% 20%, rgba(139, 92, 246, 0.15), transparent),
-    radial-gradient(ellipse 60% 50% at 70% 60%, rgba(236, 72, 153, 0.1), transparent),
-    radial-gradient(ellipse 50% 40% at 50% 80%, rgba(250, 204, 21, 0.08), transparent),
-    radial-gradient(ellipse 70% 50% at 20% 70%, rgba(14, 165, 233, 0.06), transparent);
-  animation: ambientShift 20s ease-in-out infinite;
+  width: 60vw;
+  height: 60vw;
+  max-width: 700px;
+  max-height: 700px;
+  left: -15%;
+  top: -10%;
+  background: radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.25), rgba(139, 92, 246, 0.10) 35%, transparent 70%);
+  border-radius: 50%;
+  filter: blur(60px);
+  animation: orbFloat1 18s ease-in-out infinite;
+  pointer-events: none;
 }
 
+/* 浮游光球 orb-2: 金色光晕，右下 */
 .ambient-bg::after {
   content: '';
   position: absolute;
-  inset: 0;
-  backdrop-filter: blur(120px);
-  -webkit-backdrop-filter: blur(120px);
-}
-
-@keyframes ambientShift {
-  0%, 100% { transform: translate(0, 0) rotate(0deg); }
-  33% { transform: translate(2%, -1%) rotate(1deg); }
-  66% { transform: translate(-1%, 2%) rotate(-1deg); }
-}
-
-/* ========== 浮动粒子 ========== */
-.particle {
-  position: absolute;
+  width: 55vw;
+  height: 55vw;
+  max-width: 600px;
+  max-height: 600px;
+  right: -12%;
+  bottom: -15%;
+  background: radial-gradient(circle at 50% 50%, rgba(250, 204, 21, 0.12), rgba(236, 72, 153, 0.06) 40%, transparent 70%);
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.03);
-  animation: particleFloat linear infinite;
+  filter: blur(80px);
+  animation: orbFloat2 22s ease-in-out infinite;
+  pointer-events: none;
 }
 
-@keyframes particleFloat {
-  0% {
-    transform: translateY(0) translateX(0) scale(1);
-    opacity: 0;
-  }
-  10% { opacity: 1; }
-  90% { opacity: 1; }
-  100% {
-    transform: translateY(-100vh) translateX(40px) scale(0);
-    opacity: 0;
-  }
+/* 第三光球：额外层，用工整的元素 */
+.ambient-bg-orb {
+  position: fixed;
+  width: 40vw;
+  height: 40vw;
+  max-width: 500px;
+  max-height: 500px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(70px);
+  animation: orbFloat3 20s ease-in-out infinite;
 }
 
-/* ========== 玻璃卡片效果 ========== */
+/* ========== 毛玻璃卡片 (Glassmorphism) ========== */
 .glass-card {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+}
+
+.glass-card-strong {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
   backdrop-filter: blur(40px);
   -webkit-backdrop-filter: blur(40px);
 }
 
-.glass-card-strong {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(50px);
-  -webkit-backdrop-filter: blur(50px);
+.glass-input {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
-/* ========== 按钮发光 ========== */
+/* ========== 主按钮呼吸发光 ========== */
 .btn-glow {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .btn-glow::before {
   content: '';
   position: absolute;
-  inset: -2px;
+  inset: -3px;
   border-radius: inherit;
-  background: linear-gradient(135deg,
+  background: conic-gradient(
+    from 0deg,
+    rgba(139, 92, 246, 0.4),
     rgba(250, 204, 21, 0.3),
-    rgba(251, 146, 60, 0.3),
-    rgba(236, 72, 153, 0.3),
-    rgba(139, 92, 246, 0.3)
+    rgba(236, 72, 153, 0.4),
+    rgba(99, 102, 241, 0.3),
+    rgba(139, 92, 246, 0.4)
   );
+  filter: blur(12px);
   opacity: 0;
-  transition: opacity 0.4s;
+  transition: opacity 0.5s ease;
   z-index: -1;
+  animation: btnGlowSpin 4s linear infinite;
 }
 
 .btn-glow:hover::before {
@@ -118,54 +135,143 @@ body {
 }
 
 .btn-glow:active {
-  transform: scale(0.96);
+  transform: scale(0.94);
+  transition: transform 0.15s ease;
 }
 
-/* ========== 路线连接线 ========== */
-.route-line {
-  position: relative;
+@keyframes btnGlowSpin {
+  0% { filter: blur(12px) hue-rotate(0deg); }
+  100% { filter: blur(12px) hue-rotate(360deg); }
 }
 
-.route-line::before {
-  content: '';
+/* 呼吸光晕环 (静态背景光) */
+.btn-breathe-ring {
+  animation: breatheGlow 3s ease-in-out infinite;
+}
+
+/* ========== 路线时间线 (Timeline) ========== */
+
+/* 垂直虚线连接 */
+.timeline-connector {
   position: absolute;
   left: 15px;
-  top: 40px;
-  bottom: 40px;
-  width: 2px;
-  background: linear-gradient(to bottom,
-    rgba(250, 204, 21, 0.5),
-    rgba(236, 72, 153, 0.5),
-    rgba(139, 92, 246, 0.5)
-  );
-  border-radius: 1px;
+  top: 32px;
+  bottom: 32px;
+  width: 0;
+  border-left: 2px dashed rgba(255, 255, 255, 0.10);
 }
 
 @media (min-width: 768px) {
-  .route-line::before {
+  .timeline-connector {
     left: 18px;
   }
 }
 
-/* ========== 桌面端增强 ========== */
+/* 站点圆点 — 改为 Lucide Icon 徽章容器 */
+.timeline-badge {
+  position: absolute;
+  left: 6px;
+  top: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  border: 1.5px solid;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
 @media (min-width: 768px) {
-  .ambient-bg::before {
-    background:
-      radial-gradient(ellipse 80% 60% at 30% 20%, rgba(139, 92, 246, 0.18), transparent),
-      radial-gradient(ellipse 60% 50% at 70% 60%, rgba(236, 72, 153, 0.13), transparent),
-      radial-gradient(ellipse 50% 40% at 50% 80%, rgba(250, 204, 21, 0.10), transparent),
-      radial-gradient(ellipse 70% 50% at 20% 70%, rgba(14, 165, 233, 0.08), transparent);
+  .timeline-badge {
+    left: 8px;
+    width: 22px;
+    height: 22px;
   }
 }
 
-/* ========== 滚动条 ========== */
+/* 两步之间的运输图标轨道 */
+.timeline-transport {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 42px;
+  margin-top: 6px;
+  margin-bottom: 6px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+@media (min-width: 768px) {
+  .timeline-transport {
+    margin-left: 50px;
+    font-size: 12px;
+  }
+}
+
+/* ========== 入场动画 ========== */
+
+/* Stagger 延迟工具类 */
+.stagger-1 { animation-delay: 0.08s; }
+.stagger-2 { animation-delay: 0.16s; }
+.stagger-3 { animation-delay: 0.24s; }
+.stagger-4 { animation-delay: 0.32s; }
+.stagger-5 { animation-delay: 0.40s; }
+.stagger-6 { animation-delay: 0.48s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .stagger-1, .stagger-2, .stagger-3, .stagger-4, .stagger-5, .stagger-6 {
+    animation-delay: 0s;
+  }
+}
+
+/* ========== 浮动粒子 ========== */
+.particle {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0));
+  animation: particleFloat linear infinite;
+  pointer-events: none;
+}
+
+@keyframes particleFloat {
+  0% {
+    transform: translateY(0) translateX(0) scale(1);
+    opacity: 0;
+  }
+  10% { opacity: 0.8; }
+  85% { opacity: 0.6; }
+  100% {
+    transform: translateY(-100vh) translateX(30px) scale(0.3);
+    opacity: 0;
+  }
+}
+
+/* ========== 滚动条隐藏 ========== */
 ::-webkit-scrollbar {
   width: 0;
   height: 0;
 }
 
-/* ========== 入场延迟 ========== */
-.stagger-1 { animation-delay: 0.1s; }
-.stagger-2 { animation-delay: 0.25s; }
-.stagger-3 { animation-delay: 0.4s; }
-.stagger-4 { animation-delay: 0.55s; }
+/* 自定义滚动条 (桌面端可选显示) */
+@media (min-width: 1024px) {
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 2px;
+  }
+}

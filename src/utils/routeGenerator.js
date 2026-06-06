@@ -223,11 +223,15 @@ export function pickOnePerCategory(filtered, excludeIds = []) {
  * @returns {Array} 选中的 landmark 条目 [{landmark, distance, ...}]
  */
 function pickByStyle(filtered, targetCategories, targetCount, style, excludeIds = [], timeBudget = '2h', transport = 'walk') {
-  // === 跨城模式：1天/2天 + 高铁 ===
+  // === 跨城模式：1天/2天 + 高铁（有防递归保护）===
   const isCrossCity = (timeBudget === '1d' || timeBudget === '2d') && transport === 'train'
-  if (isCrossCity) {
-    return pickCrossCity(filtered, targetCategories, targetCount, style, excludeIds, timeBudget)
+  if (isCrossCity && !_crossCityGuard) {
+    const result = pickCrossCity(filtered, targetCategories, targetCount, style, excludeIds, timeBudget)
+    if (result && result.length >= 2) return result
+    // 跨城失败 → 退化为普通模式继续
+    _crossCityGuard = false
   }
+  _crossCityGuard = false
 
   // 按类别分组
   const groups = {}
@@ -375,29 +379,44 @@ function pickByStyle(filtered, targetCategories, targetCount, style, excludeIds 
 // ==================== 跨城路线 ====================
 
 /**
+ * 安全获取 landmark 对象（兼容两种数据格式）：
+ *   格式A (filterByRadius 包装):  { landmark: {...}, distance: number }
+ *   格式B (API 原始数据):         { id, name, lat, lng, category, ... }
+ */
+function getLM(item) {
+  return item.landmark || item
+}
+
+/**
+ * 交叉防递归开关 — 防止跨城→fallback→跨城 无限循环
+ */
+let _crossCityGuard = false
+
+/**
  * 跨城模式：1天/2天 + 高铁 → 从 2-3 个城市各选 2-4 个地标
  */
 function pickCrossCity(allLandmarks, targetCategories, targetCount, style, excludeIds, timeBudget) {
   // 按城市分组
   const cityGroups = {}
   for (const item of allLandmarks) {
-    const city = item.landmark.city || 'other'
+    const lm = getLM(item)
+    const city = lm.city || lm.address?.slice(0, 4) || 'other'
     if (!cityGroups[city]) cityGroups[city] = []
     cityGroups[city].push(item)
   }
 
   const cities = Object.keys(cityGroups)
   if (cities.length < 2) {
-    // 只有一个城市，退化为普通模式
-    return pickByStyle(allLandmarks, targetCategories, targetCount, style, excludeIds, timeBudget, 'walk')
+    // 只有一个城市/未知城市 → 退化为普通模式，不走回头路
+    _crossCityGuard = true
+    return null  // 让上层 fallback 用 walk 模式重试
   }
 
-  // 确定跨城数量：2天选3个城市，1天选2个
+  // 确定跨城数量
   const numCities = Math.min(timeBudget === '2d' ? 3 : 2, cities.length)
   const perCity = Math.max(2, Math.floor(targetCount / numCities))
   const foodMin = TIME_FOOD_MIN[timeBudget] || 2
 
-  // 随机选出城市
   const shuffledCities = [...cities]
   shuffle(shuffledCities)
   const chosenCities = shuffledCities.slice(0, numCities)
@@ -413,18 +432,15 @@ function pickCrossCity(allLandmarks, targetCategories, targetCount, style, exclu
     const need = Math.min(perCity, targetCount - picked.length)
     if (need <= 0) break
 
-    // 在这个城市内按类别多样性选
     const groups = {}
     for (const item of cityLandmarks) {
-      const cat = item.landmark.category
+      const cat = getLM(item).category || 'culture'
       if (!groups[cat]) groups[cat] = []
       groups[cat].push(item)
     }
 
-    // 优先选公园 > 文化 > 美食 > 咖啡馆
     const categoryOrder = [...targetCategories]
     if (!categoryOrder.includes('food')) categoryOrder.push('food')
-    // 确保咖啡馆在最后
     categoryOrder.sort((a) => a === 'cafe' ? 1 : 0)
 
     let cityPicked = 0
@@ -433,17 +449,33 @@ function pickCrossCity(allLandmarks, targetCategories, targetCount, style, exclu
       if (!groups[cat]) continue
       if (cat === 'cafe' && cafeCount >= cafeMax) continue
 
-      const pool = groups[cat].filter((item) => !usedInThisRoute.has(item.landmark.id))
+      const pool = groups[cat].filter((item) => !usedInThisRoute.has(getLM(item).id))
       if (pool.length === 0) continue
 
       const shuffled = [...pool]
       shuffle(shuffled)
       const item = shuffled[0]
       picked.push(item)
-      usedInThisRoute.add(item.landmark.id)
+      usedInThisRoute.add(getLM(item).id)
       if (cat === 'cafe') cafeCount++
       if (cat === 'food') foodCount++
       cityPicked++
+    }
+
+    // 如果这个城市选不够，尝试从该城市其他类别补
+    if (cityPicked < need) {
+      const remaining = cityLandmarks.filter((item) => !usedInThisRoute.has(getLM(item).id))
+      shuffle(remaining)
+      for (const item of remaining) {
+        if (cityPicked >= need) break
+        const cat = getLM(item).category || 'other'
+        if (cat === 'cafe' && cafeCount >= cafeMax) continue
+        picked.push(item)
+        usedInThisRoute.add(getLM(item).id)
+        if (cat === 'cafe') cafeCount++
+        if (cat === 'food') foodCount++
+        cityPicked++
+      }
     }
   }
 
@@ -451,16 +483,15 @@ function pickCrossCity(allLandmarks, targetCategories, targetCount, style, exclu
   if (foodCount < foodMin) {
     const deficit = foodMin - foodCount
     const allFoodPool = allLandmarks
-      .filter(l => l.landmark.category === 'food' && !usedInThisRoute.has(l.landmark.id))
+      .filter(l => getLM(l).category === 'food' && !usedInThisRoute.has(getLM(l).id))
     shuffle(allFoodPool)
     for (let k = 0; k < Math.min(deficit, allFoodPool.length); k++) {
       picked.push(allFoodPool[k])
-      usedInThisRoute.add(allFoodPool[k].landmark.id)
-      foodCount++
+      usedInThisRoute.add(getLM(allFoodPool[k]).id)
     }
   }
 
-  return picked.slice(0, targetCount)
+  return picked.length >= 2 ? picked.slice(0, targetCount) : null
 }
 
 // ==================== 路径排序 (最近邻算法、不走回头路) ====================
@@ -486,7 +517,8 @@ export function orderByGreedy(picked, userLat, userLng) {
 
   // 只有 1 个点：直接计算从用户出发的距离
   if (points.length === 1) {
-    const dist = haversineDistance(userLat, userLng, points[0].landmark.lat, points[0].landmark.lng)
+    const onlyLM = getLM(points[0])
+    const dist = haversineDistance(userLat, userLng, onlyLM.lat, onlyLM.lng)
     return [{ ...points[0], walkingDist: dist, walkingTime: dist * 15 }]
   }
 
@@ -495,7 +527,8 @@ export function orderByGreedy(picked, userLat, userLng) {
   let nearestDist = Infinity
 
   points.forEach((p, i) => {
-    const d = haversineDistance(userLat, userLng, p.landmark.lat, p.landmark.lng)
+    const lm = getLM(p)
+    const d = haversineDistance(userLat, userLng, lm.lat, lm.lng)
     if (d < nearestDist) { nearestDist = d; nearestIdx = i }
   })
 
@@ -504,15 +537,13 @@ export function orderByGreedy(picked, userLat, userLng) {
 
   // ===== Step 2–N: 贪心最近邻串联剩余点 =====
   while (points.length > 0) {
-    const last = ordered[ordered.length - 1]
+    const lastLM = getLM(ordered[ordered.length - 1])
     let nextIdx = 0
     let nextDist = Infinity
 
     points.forEach((p, i) => {
-      const d = haversineDistance(
-        last.landmark.lat, last.landmark.lng,
-        p.landmark.lat, p.landmark.lng
-      )
+      const lm = getLM(p)
+      const d = haversineDistance(lastLM.lat, lastLM.lng, lm.lat, lm.lng)
       if (d < nextDist) { nextDist = d; nextIdx = i }
     })
 
@@ -532,28 +563,31 @@ export function computeSummary(orderedRoute, preferences = null) {
 
   const totalWalkingDist = orderedRoute.reduce((sum, s) => sum + (s.walkingDist || 0), 0)
   const totalStayTime = orderedRoute.reduce(
-    (sum, s) => sum + Math.round((s.landmark.suggestedStay || 30) * stayMultiplier),
+    (sum, s) => sum + Math.round(((getLM(s).suggestedStay || 30) * stayMultiplier)),
     0
   )
   const walkingTime = totalWalkingDist * 15
   const totalTime = Math.round((walkingTime + totalStayTime) * 1.2)
 
-  const routeSummary = orderedRoute.map((s, idx) => ({
-    order: idx + 1,
-    name: s.landmark.name,
-    category: s.landmark.category,
-    description: s.landmark.description,
-    tip: s.landmark.tip,
-    stayMinutes: Math.round((s.landmark.suggestedStay || 30) * stayMultiplier),
-    photoUrl: s.landmark.photos?.[0] || null,
-    photos: s.landmark.photos || [],
-    address: s.landmark.address || '',
-    rating: s.landmark.rating || null,
-    cost: s.landmark.cost || null,
-    walkingFromPrev: s.walkingDist
-      ? `${(s.walkingDist * 1000).toFixed(0)}m (约${Math.round(s.walkingTime)}分钟步行)`
-      : '出发点',
-  }))
+  const routeSummary = orderedRoute.map((s, idx) => {
+    const lm = getLM(s)
+    return {
+      order: idx + 1,
+      name: lm.name,
+      category: lm.category,
+      description: lm.description,
+      tip: lm.tip,
+      stayMinutes: Math.round((lm.suggestedStay || 30) * stayMultiplier),
+      photoUrl: lm.photos?.[0] || null,
+      photos: lm.photos || [],
+      address: lm.address || '',
+      rating: lm.rating || null,
+      cost: lm.cost || null,
+      walkingFromPrev: s.walkingDist
+        ? `${(s.walkingDist * 1000).toFixed(0)}m (约${Math.round(s.walkingTime)}分钟步行)`
+        : '出发点',
+    }
+  })
 
   return {
     totalWalkingDist: Math.round(totalWalkingDist * 1000),
@@ -617,7 +651,19 @@ export function generateRoute(userLat, userLng, landmarks, preferences = null, e
     const stillMissing = targetCategories.filter((c) => !fallbackCats.has(c))
 
     if (stillMissing.length === targetCategories.length || fallback.length < 2) {
-      return { success: false, error: '附近地标数据不足，换个位置试试吧~' }
+      // 最终兜底：放弃距离限制，使用全部地标按距离排序取最近的
+      const global = landmarks
+        .map((lm) => ({
+          landmark: lm,
+          distance: haversineDistance(userLat, userLng, lm.lat, lm.lng),
+        }))
+        .sort((a, b) => a.distance - b.distance)
+
+      if (global.length < 2) {
+        return { success: false, error: '附近地标数据不足，换个位置试试吧~' }
+      }
+
+      return buildRouteWithPreferences(global, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, transport, userLat, userLng)
     }
 
     return buildRouteWithPreferences(fallback, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, transport, userLat, userLng)
@@ -646,7 +692,9 @@ function buildRouteWithPreferences(filtered, targetCategories, targetCount, styl
   }
 
   if (!picked || picked.length < 2) {
-    picked = pickByStyle(filtered, targetCategories, Math.max(targetCount, 2), style, [], timeBudget, transport)
+    // 兜底：取消跨城 + 取消去重再试一次
+    const fallbackTransport = transport === 'train' ? 'walk' : transport
+    picked = pickByStyle(filtered, targetCategories, Math.max(targetCount, 2), style, [], timeBudget, fallbackTransport)
     if (!picked || picked.length < 2) {
       return { success: false, error: '找不到足够多的不同地点，请换个区域试试' }
     }

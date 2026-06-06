@@ -1,19 +1,17 @@
 /**
- * 模拟地标数据 — 上海 + 北京双重基准 + 全国重点城市
- * 上海基准: 31.2304, 121.4737 (人民广场)
- * 北京基准: 39.9163, 116.3972 (天安门)
+ * 模拟地标数据 — 覆盖全国 20+ 城市
  *
- * 五类地点 (共 84 个):
- *  - culture:  文化古迹 / 名胜 / 艺术空间 / 热门景点 (30个)
- *  - cafe:     咖啡厅 / 小店 / 书店 / 街区 (14个，比重低)
- *  - park:     公园 / 散步道 / 滨江 / 皇家园林 (22个)
- *  - food:     餐厅 / 小吃 / 美食街 (12个，2h+路线必须包含)
+ * 五类地点 (共 110+ 个):
+ *  - culture:  文化古迹 / 名胜 / 热门景点 (40+)
+ *  - cafe:     咖啡厅 / 小店 / 书店 (14个，比重低)
+ *  - park:     公园 / 散步道 / 滨江 / 皇家园林 (30+)
+ *  - food:     餐厅 / 小吃 / 美食街 (18个)
  *
- * 咖啡馆已被系统硬限制：每条路线最多 0-2 间
- * 2h以上路线自动包含餐厅，1天路线≥2个，2天路线≥3个
- * 1天/2天+高铁 自动开启跨城模式
+ * 覆盖城市: 上海、北京、西安、杭州、南京、苏州、成都、武汉、
+ *           广州、深圳、重庆、长沙、厦门、青岛、昆明、天津、
+ *           哈尔滨、大连、三亚、拉萨、洛阳
  *
- * city 字段用于跨城分组: beijing / shanghai / xian / hangzhou / nanjing / suzhou / chengdu / wuhan
+ * 兜底策略: API 失败+当地无地标时，不再报错，而是从全库取最近地点
  */
 
 const LANDMARKS = [
@@ -611,6 +609,111 @@ const LANDMARKS = [
     cost: 80,
     city: 'chengdu',
   },
+  {
+    id: 'fd13',
+    name: '广州北京路',
+    category: 'food',
+    lat: 23.1250, lng: 113.2700,
+    description: '千年古道上的美食步行街，煲仔饭、云吞面、双皮奶吃不停',
+    suggestedStay: 50,
+    tip: '银记肠粉和达杨炖品是这条街的传奇老字号',
+    rating: 4.4,
+    cost: 50,
+    city: 'guangzhou',
+  },
+  {
+    id: 'fd14',
+    name: '重庆八一路好吃街',
+    category: 'food',
+    lat: 29.5610, lng: 106.5770,
+    description: '解放碑旁的烟火美食街，酸辣粉、担担面、山城小汤圆一网打尽',
+    suggestedStay: 45,
+    tip: '好又来酸辣粉排队最长，但真的值得等，记得点微微辣',
+    rating: 4.3,
+    cost: 30,
+    city: 'chongqing',
+  },
+  {
+    id: 'fd15',
+    name: '长沙坡子街',
+    category: 'food',
+    lat: 28.1980, lng: 112.9760,
+    description: '火宫殿所在地，臭豆腐、糖油粑粑、口味虾的长沙味觉之旅',
+    suggestedStay: 50,
+    tip: '黑色经典臭豆腐外焦里嫩，火宫殿的糖油粑粑甜而不腻',
+    rating: 4.4,
+    cost: 40,
+    city: 'changsha',
+  },
+  {
+    id: 'fd16',
+    name: '厦门中山路',
+    category: 'food',
+    lat: 24.4530, lng: 118.0850,
+    description: '闽南骑楼老街里的美食宝库，沙茶面、海蛎煎、土笋冻让人流连',
+    suggestedStay: 45,
+    tip: '莲欢海蛎煎是中山路的老字号，局口街小巷子别有洞天',
+    rating: 4.3,
+    cost: 40,
+    city: 'xiamen',
+  },
+  {
+    id: 'fd17',
+    name: '青岛啤酒街',
+    category: 'food',
+    lat: 36.0720, lng: 120.3730,
+    description: '登州路的啤酒一条街，原浆扎啤配辣炒蛤蜊是青岛人最爱的宵夜',
+    suggestedStay: 60,
+    tip: '一定要喝青岛啤酒厂出来的原浆，和瓶装完全不一样',
+    rating: 4.2,
+    cost: 60,
+    city: 'qingdao',
+  },
+
+  // ==================== 全国城市地标（culture） ====================
+  // 广州
+  { id: 'c31', name: '广州塔', category: 'culture', lat: 23.1090, lng: 113.3240, description: '600米高的广州新地标，昵称"小蛮腰"，珠江夜景尽收眼底', suggestedStay: 50, tip: '日落前上塔性价比最高，同时看到白天和夜晚两种广州', rating: 4.6, cost: 150, city: 'guangzhou' },
+  { id: 'c32', name: '陈家祠', category: 'culture', lat: 23.1290, lng: 113.2460, description: '岭南建筑艺术的明珠，砖雕木雕石雕堪称一绝', suggestedStay: 50, tip: '木雕故事屏和铁铸通花栏板是镇馆之宝', rating: 4.5, cost: 10, city: 'guangzhou' },
+  // 深圳
+  { id: 'c33', name: '世界之窗', category: 'culture', lat: 22.5370, lng: 113.9760, description: '全球名胜微缩景观主题公园，一天走遍全世界', suggestedStay: 180, tip: '晚上的大型歌舞表演很震撼，建议买夜场票性价比高', rating: 4.3, cost: 220, city: 'shenzhen' },
+  { id: 'c34', name: '深圳湾公园', category: 'park', lat: 22.5260, lng: 113.9570, description: '15公里海滨长廊，对面就是香港元朗，骑行散步绝佳', suggestedStay: 60, tip: '日落时分来最好，海面洒满金光，还能远眺深圳湾大桥', rating: 4.5, cost: 0, city: 'shenzhen' },
+  // 重庆
+  { id: 'c35', name: '洪崖洞', category: 'culture', lat: 29.5630, lng: 106.5850, description: '悬崖上的吊脚楼群，夜幕降临时分宛如千与千寻的奇幻世界', suggestedStay: 60, tip: '最佳拍照点在千厮门大桥上，晚上亮灯后真的绝美', rating: 4.7, cost: 0, city: 'chongqing' },
+  { id: 'c36', name: '磁器口古镇', category: 'culture', lat: 29.5830, lng: 106.4420, description: '嘉陵江畔的千年古镇，青石板路两旁尽是陈麻花和毛血旺的香气', suggestedStay: 60, tip: '陈麻花现炸的最好吃，避开主街往小巷里钻更有味道', rating: 4.4, cost: 0, city: 'chongqing' },
+  { id: 'c37', name: '南山一棵树', category: 'park', lat: 29.5560, lng: 106.6070, description: '俯瞰重庆夜景的最佳观景台，山城万家灯火尽收眼底', suggestedStay: 40, tip: '重庆夜景是出了名的美，带个长焦镜头来拍绝对出片', rating: 4.5, cost: 30, city: 'chongqing' },
+  // 长沙
+  { id: 'c38', name: '岳麓山', category: 'park', lat: 28.1860, lng: 112.9380, description: '千年学府岳麓书院坐落山脚，爱晚亭的红枫是长沙最美的秋色', suggestedStay: 90, tip: '坐索道上山走路下山最舒服，岳麓书院值得花一小时慢慢看', rating: 4.6, cost: 40, city: 'changsha' },
+  { id: 'c39', name: '橘子洲', category: 'park', lat: 28.1920, lng: 112.9620, description: '湘江之中的狭长沙洲，青年毛泽东雕像巍然矗立', suggestedStay: 60, tip: '每周六晚上有烟花表演（季节限定），小火车坐到洲头最方便', rating: 4.5, cost: 0, city: 'changsha' },
+  // 厦门
+  { id: 'c40', name: '鼓浪屿', category: 'culture', lat: 24.4480, lng: 118.0690, description: '万国建筑博物馆+钢琴之岛，没有汽车的岛屿处处是文艺', suggestedStay: 120, tip: '日光岩是制高点，菽庄花园的钢琴博物馆很有味道，提前买船票', rating: 4.7, cost: 35, city: 'xiamen' },
+  { id: 'c41', name: '南普陀寺', category: 'culture', lat: 24.4430, lng: 118.0930, description: '闽南佛教圣地，背靠五老峰面朝大海，免费素斋是特色', suggestedStay: 50, tip: '寺后的五老峰可以俯瞰厦大全景，素饼是伴手礼首选', rating: 4.5, cost: 0, city: 'xiamen' },
+  // 青岛
+  { id: 'c42', name: '栈桥', category: 'culture', lat: 36.0600, lng: 120.3180, description: '青岛的百年城市名片，回澜阁伸入大海，海鸥飞舞', suggestedStay: 30, tip: '冬天有大群海鸥可以喂，配合远处的小青岛灯塔画面感满分', rating: 4.4, cost: 0, city: 'qingdao' },
+  { id: 'c43', name: '八大关', category: 'park', lat: 36.0580, lng: 120.3530, description: '十条以关隘命名的林荫道，200多栋欧式别墅藏在梧桐深处', suggestedStay: 60, tip: '秋天银杏和枫叶交织最美，每条路都有不同的树种和颜色', rating: 4.6, cost: 0, city: 'qingdao' },
+  // 昆明
+  { id: 'c44', name: '滇池', category: 'park', lat: 25.0040, lng: 102.6570, description: '云南最大淡水湖，"高原明珠"，冬天红嘴鸥漫天飞舞', suggestedStay: 60, tip: '海埂大坝是喂海鸥的最佳位置，每年11月到次年3月最壮观', rating: 4.5, cost: 0, city: 'kunming' },
+  { id: 'c45', name: '翠湖公园', category: 'park', lat: 25.0480, lng: 102.7070, description: '昆明市中心的绿宝石，荷花满池杨柳依依', suggestedStay: 40, tip: '冬天也是红嘴鸥的聚集地，夏天荷花开了划船特别惬意', rating: 4.3, cost: 0, city: 'kunming' },
+  // 天津
+  { id: 'c46', name: '天津之眼', category: 'culture', lat: 39.1550, lng: 117.1820, description: '建在海河桥上的巨型摩天轮，天津最浪漫的地标', suggestedStay: 40, tip: '夜幕降临时分最美，海河两岸灯光和摩天轮倒影交相辉映', rating: 4.4, cost: 70, city: 'tianjin' },
+  { id: 'c47', name: '五大道', category: 'culture', lat: 39.1110, lng: 117.2030, description: '2000多栋不同国家风格的花园洋房，万国建筑博览会', suggestedStay: 60, tip: '租一辆自行车慢慢逛最好，马车游览也是特色体验', rating: 4.5, cost: 0, city: 'tianjin' },
+  // 哈尔滨
+  { id: 'c48', name: '中央大街', category: 'culture', lat: 45.7740, lng: 126.6170, description: '亚洲最长的步行街，71栋欧式建筑诉说着东方莫斯科的历史', suggestedStay: 50, tip: '冬天来一定要吃马迭尔冰棍，零下30度吃冰棍的体验独一无二', rating: 4.5, cost: 0, city: 'haerbin' },
+  { id: 'c49', name: '太阳岛', category: 'park', lat: 45.7910, lng: 126.6000, description: '松花江北岸的城市绿洲，夏天是避暑胜地冬天是雪雕王国', suggestedStay: 90, tip: '冰雪大世界就在旁边，可以一天玩完两个地方', rating: 4.4, cost: 30, city: 'haerbin' },
+  // 大连
+  { id: 'c50', name: '星海广场', category: 'park', lat: 38.8850, lng: 121.5830, description: '亚洲最大的城市广场，面朝大海，百年城雕诉说着大连的故事', suggestedStay: 45, tip: '晚上音乐喷泉+跨海大桥灯光秀很梦幻，旁边就是圣亚海洋世界', rating: 4.4, cost: 0, city: 'dalian' },
+  { id: 'c51', name: '老虎滩海洋公园', category: 'culture', lat: 38.8720, lng: 121.6730, description: '大连最受欢迎的海滨主题公园，极地馆的白鲸表演令人难忘', suggestedStay: 150, tip: '极地馆和珊瑚馆是精华，海豚表演场场爆满建议提前占位置', rating: 4.5, cost: 220, city: 'dalian' },
+  // 三亚
+  { id: 'c52', name: '亚龙湾', category: 'park', lat: 18.2190, lng: 109.6380, description: '天下第一湾，7公里银白沙滩和玻璃般透澈的海水', suggestedStay: 120, tip: '沙子细得像面粉，早上去人少水清，中午之后游客就多了', rating: 4.6, cost: 0, city: 'sanya' },
+  { id: 'c53', name: '天涯海角', category: 'culture', lat: 18.2970, lng: 109.3440, description: '海南最经典的地标，巨石、碧海、椰林构成热带浪漫', suggestedStay: 60, tip: '"天涯""海角"两块石头是必打卡的，建议坐电瓶车省力', rating: 4.2, cost: 80, city: 'sanya' },
+  // 拉萨
+  { id: 'c54', name: '布达拉宫', category: 'culture', lat: 29.6576, lng: 91.1172, description: '世界上海拔最高的宫殿，藏传佛教的圣地，雪域高原的灵魂', suggestedStay: 120, tip: '提前预约门票，爬台阶时走慢一点（海拔3700米），红宫白宫各有千秋', rating: 4.9, cost: 200, city: 'lasa' },
+  { id: 'c55', name: '大昭寺', category: 'culture', lat: 29.6535, lng: 91.1315, description: '藏传佛教最神圣的寺庙，释迦牟尼12岁等身像供奉于此', suggestedStay: 60, tip: '清晨看信徒磕长头是最震撼的体验，八廓街围绕大昭寺转经也是经典', rating: 4.7, cost: 85, city: 'lasa' },
+  // 郑州/洛阳
+  { id: 'c56', name: '龙门石窟', category: 'culture', lat: 34.5560, lng: 112.4700, description: '世界文化遗产，10万余尊佛像雕刻在伊河两岸的悬崖上', suggestedStay: 120, tip: '卢舍那大佛的微笑被称为"东方蒙娜丽莎"，西山石窟是精华', rating: 4.7, cost: 90, city: 'luoyang' },
+  // 苏州补
+  { id: 'c57', name: '平江路', category: 'culture', lat: 31.3160, lng: 120.6360, description: '苏州保存最完好的历史老街，小桥流水人家的完美诠释', suggestedStay: 50, tip: '清晨人少时最美，找个茶馆靠窗坐下听评弹最惬意', rating: 4.5, cost: 0, city: 'suzhou' },
+  // 武汉补
+  { id: 'c58', name: '黄鹤楼', category: 'culture', lat: 30.5470, lng: 114.3030, description: '天下江山第一楼，崔颢李白为之赋诗千年的文化地标', suggestedStay: 45, tip: '登楼远眺长江大桥和龟山电视塔全景，晚上有灯光秀', rating: 4.4, cost: 70, city: 'wuhan' },
 
   // ==================== 公园 / 散步道 / 滨江 ====================
   {

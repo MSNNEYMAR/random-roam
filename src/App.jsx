@@ -80,9 +80,9 @@ export default function App() {
 
     const results = await Promise.all(
       legs.map(async (leg) => {
-        const fromLat = leg.fromLat ?? orderedRoute[leg.fromIdx].landmark.lat
-        const fromLng = leg.fromLng ?? orderedRoute[leg.fromIdx].landmark.lng
-        const to = orderedRoute[leg.toIdx].landmark
+        const fromLat = leg.fromLat ?? (orderedRoute[leg.fromIdx].landmark || orderedRoute[leg.fromIdx]).lat
+        const fromLng = leg.fromLng ?? (orderedRoute[leg.fromIdx].landmark || orderedRoute[leg.fromIdx]).lng
+        const to = orderedRoute[leg.toIdx].landmark || orderedRoute[leg.toIdx]
 
         const walking = await fetchWalkingRoute(fromLat, fromLng, to.lat, to.lng, apiKey)
         return { toIdx: leg.toIdx, walking }
@@ -108,7 +108,7 @@ export default function App() {
    * 保留最近 20 个，自动去重
    */
   const recordUsedIds = useCallback((orderedRoute) => {
-    const newIds = orderedRoute.map((s) => s.landmark.id)
+    const newIds = orderedRoute.map((s) => (s.landmark || s).id).filter(Boolean)
     addToHistory(newIds)
   }, [])
 

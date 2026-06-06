@@ -23,7 +23,10 @@ const AMAP_BASE = '/api/amap'  // 由 Vite proxy 转发到 restapi.amap.com
  * @returns {boolean} true = 已关门，应过滤掉
  */
 function isCurrentlyClosed(poi) {
-  const rawTime = poi.biz_ext?.open_time || poi.biz_ext?.opentime2 || ''
+  // 高德 API 可能返回数组或字符串，统一转字符串
+  const bizExt = poi.biz_ext || {}
+  const rawOpenTime = bizExt.open_time || bizExt.opentime2 || ''
+  const rawTime = Array.isArray(rawOpenTime) ? '' : String(rawOpenTime)
   const now = new Date()
   const currentMinutes = now.getHours() * 60 + now.getMinutes()
   const currentHour = now.getHours()
@@ -137,10 +140,18 @@ export async function fetchFromAmap(lat, lng, keywords, radius, apiKey) {
 
   const url = `${AMAP_BASE}/v3/place/around?${params.toString()}`
 
-  const response = await fetch(url)
+  let response
+  try {
+    response = await fetch(url)
+  } catch (netErr) {
+    console.error(`[Amap] fetch failed (${keywords.slice(0, 30)}):`, netErr)
+    throw new Error(`网络请求失败: ${netErr.message || netErr}`)
+  }
 
   if (!response.ok) {
-    throw new Error(`Amap API HTTP ${response.status}`)
+    const errorText = await response.text().catch(() => '')
+    console.error(`[Amap] HTTP ${response.status} (${keywords.slice(0, 30)}):`, errorText)
+    throw new Error(`Amap API HTTP ${response.status}: ${errorText.slice(0, 200)}`)
   }
 
   const data = await response.json()
@@ -168,6 +179,7 @@ export async function fetchFromAmap(lat, lng, keywords, radius, apiKey) {
 
     // 提取实景照片 URL（取前3张）
     const photos = (poi.photos || []).map(p => p.url).filter(Boolean).slice(0, 3)
+    const bizExt = poi.biz_ext || {}
 
     return {
       name: poi.name,
@@ -176,9 +188,9 @@ export async function fetchFromAmap(lat, lng, keywords, radius, apiKey) {
       address: poi.address || '',
       description: buildDescription(poi),
       photos,
-      rating: poi.biz_ext?.rating || null,
-      cost: poi.biz_ext?.cost || null,
-      openTime: poi.biz_ext?.open_time || poi.biz_ext?.opentime2 || null,
+      rating: (bizExt.rating != null && !Array.isArray(bizExt.rating)) ? bizExt.rating : null,
+      cost: (bizExt.cost != null && !Array.isArray(bizExt.cost)) ? bizExt.cost : null,
+      openTime: ((typeof bizExt.open_time === 'string' && bizExt.open_time) || bizExt.opentime2) || null,
     }
   })
 }
@@ -250,7 +262,7 @@ export async function fetchWalkingRoute(originLat, originLng, destLat, destLng, 
  * @param {number} lat    纬度
  * @param {number} lng    经度
  * @param {string} apiKey 高德 Web服务 API Key
- * @returns {Promise<string>} 如 "上海市静安区南京西路"
+ * @returns {Promise<string>} 如 "广州市天河区体育西路"
  */
 export async function reverseGeocode(lat, lng, apiKey) {
   const location = `${lng},${lat}`
@@ -314,11 +326,11 @@ function buildDescription(poi) {
     parts.push(typeClean)
   }
 
-  if (poi.biz_ext?.rating) {
+  if (poi.biz_ext?.rating != null && !Array.isArray(poi.biz_ext.rating) && poi.biz_ext.rating) {
     parts.push(`⭐ ${poi.biz_ext.rating}`)
   }
 
-  if (poi.biz_ext?.cost) {
+  if (poi.biz_ext?.cost != null && !Array.isArray(poi.biz_ext.cost) && poi.biz_ext.cost) {
     parts.push(`人均 ¥${poi.biz_ext.cost}`)
   }
 
@@ -327,4 +339,47 @@ function buildDescription(poi) {
   }
 
   return parts.join(' | ') || poi.name
+}
+
+/**
+ * 地理编码 — 城市名 → 坐标
+ *
+ * 文档: https://lbs.amap.com/api/webservice/guide/api/georegeo
+ * 接口: v3/geocode/geo
+ *
+ * @param {string} cityName  城市名，如 "广州"、"成都"、"南京"
+ * @param {string} apiKey    高德 Web服务 API Key
+ * @returns {Promise<{lat: number, lng: number, address: string} | null>}
+ */
+export async function geocodeCity(cityName, apiKey) {
+  const params = new URLSearchParams({
+    key: apiKey,
+    address: cityName,
+    city: cityName,
+  })
+
+  const url = `${AMAP_BASE}/v3/geocode/geo?${params.toString()}`
+
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`Geocode HTTP ${response.status}`)
+  }
+
+  const data = await response.json()
+
+  if (data.status !== '1' || !data.geocodes?.length) {
+    console.warn('[Amap] 地理编码失败:', data.info)
+    return null
+  }
+
+  const geo = data.geocodes[0]
+  const [lngStr, latStr] = (geo.location || '0,0').split(',')
+  const lat = parseFloat(latStr)
+  const lng = parseFloat(lngStr)
+
+  return {
+    lat,
+    lng,
+    address: geo.formatted_address || cityName,
+  }
 }

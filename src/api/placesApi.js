@@ -5,6 +5,7 @@
 import { CURRENT_PROVIDER, PROVIDER_CONFIG, CATEGORY_DEFAULTS, DEFAULT_TIPS } from './providers'
 import { fetchFromAmap } from './amapAdapter'
 import { fetchFromGoogle } from './googleAdapter'
+import { TRANSPORT_CONFIG } from '../utils/routeGenerator'
 
 // ==================== localStorage 历史去重 ====================
 
@@ -77,10 +78,12 @@ function normalizeLandmark(raw, category) {
 // ==================== 主入口 ====================
 
 /**
- * 100% 依赖高德 place/around 周边搜索，radius=10000m
- * 不包含任何静态地标兜底
+ * @param {number} lat                   中心点纬度
+ * @param {number} lng                   中心点经度
+ * @param {number} searchRadiusOverride  出行方式决定的搜索半径 (米)，未传则用默认 10000m
+ * @returns {Promise<Array>} 标准化后的地标列表
  */
-export async function fetchLandmarksByPosition(lat, lng) {
+export async function fetchLandmarksByPosition(lat, lng, searchRadiusOverride = null) {
   idCounter = 0
   let rawResults = []
 
@@ -91,7 +94,7 @@ export async function fetchLandmarksByPosition(lat, lng) {
         throw new Error('高德 API Key 未配置，请在 providers.js 中填入你的 Key')
       }
 
-      const searchRadius = config.radius || 10000
+      const searchRadius = searchRadiusOverride || config.radius || 10000
       console.log(`[RandomRoam] 高德周边搜索: radius=${searchRadius}m, location=${lng},${lat}`)
 
       const [cultureResults, cafeResults, parkResults, foodResults] = await Promise.all([

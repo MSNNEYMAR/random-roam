@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Footprints,
+  Bike,
   TrainFront,
   Car,
   Sparkles,
@@ -21,8 +22,9 @@ const CATEGORIES = [
     radius: 0.14,
     options: [
       { value: 'walk',    label: '步行', icon: Footprints },
-      { value: 'subway',  label: '地铁', icon: TrainFront },
-      { value: 'taxi',    label: '打车', icon: Car },
+      { value: 'cycle',  label: '骑行', icon: Bike },
+      { value: 'subway', label: '地铁', icon: TrainFront },
+      { value: 'drive',  label: '打车', icon: Car },
     ],
   },
   {

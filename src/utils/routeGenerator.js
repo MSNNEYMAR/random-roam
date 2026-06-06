@@ -1,20 +1,61 @@
 /**
- * 路线生成器 — 100% 依赖高德周边搜索 API，同城/周边 10km 以内
+ * 路线生成器 — 100% 依赖高德周边搜索 API，同城/周边
  *
  * 流程:
- *  1. 高德 place/around: radius=10000m → 获取周边 POI
- *  2. 根据出行方式做二次距离精筛
+ *  1. 高德 place/around: radius 由出行方式动态决定
+ *  2. 按出行方式做二次距离精筛
  *  3. 根据风格模式确定目标类别和数量
  *  4. Fisher-Yates 洗牌 + 类别多样性抽选
  *  5. 最近邻排序：用户位置 → 最近 → 次近 → ...
- *  6. 1天/2天路线: 多抽点，按天分组，每天独立最近邻排序
+ *  6. 里程校验：超出 maxDailyDistance 则重试洗牌
+ *  7. 1天/2天路线: 多抽点，按天分组，每天独立最近邻排序 + 独立校验
  *
  * 偏好参数:
- *  - transport: 'walk' | 'subway' | 'taxi'
+ *  - transport: 'walk' | 'cycle' | 'drive'
  *  - time:      '1h'|'2h'|'3h'|'5h'|'1d'|'2d'
  *  - style:     'relax'|'artsy'|'commando'|'couple'|'quiet'|'budget'
  *  - excludeIds: string[] — 跨代去重
  */
+
+// ==================== 出行方式配置表 ====================
+export const TRANSPORT_CONFIG = {
+  walk: {
+    searchRadius: 2500,      // API 搜索半径 (米)
+    maxDailyDistance: 7000,   // 单日最大总里程 (米) — 人类步行极限
+    speed: 1.2,               // 移动速度 (米/秒) ≈ 4.3 km/h
+    label: '步行',
+    filterMinKm: 0.2,        // 二次筛选最小距离 (km)
+    filterMaxKm: 2.5,         // 二次筛选最大距离 (km)
+    fallbackTiers: [1.0, 1.5, 2.0],  // 二次筛选逐级兜底 (km)
+  },
+  cycle: {
+    searchRadius: 6000,
+    maxDailyDistance: 15000,
+    speed: 4.0,               // ≈ 14.4 km/h
+    label: '骑行',
+    filterMinKm: 0.5,
+    filterMaxKm: 6.0,
+    fallbackTiers: [2.0, 3.5, 5.0],
+  },
+  subway: {
+    searchRadius: 20000,
+    maxDailyDistance: 35000,
+    speed: 8.0,               // ≈ 29 km/h（含进站/换乘/步行到站）
+    label: '地铁',
+    filterMinKm: 2.0,         // 地铁不适合太近的点
+    filterMaxKm: 20.0,
+    fallbackTiers: [3.0, 5.0, 8.0, 15.0, 20.0],
+  },
+  drive: {
+    searchRadius: 15000,
+    maxDailyDistance: 40000,
+    speed: 10.0,              // ≈ 36 km/h（市区车速）
+    label: '打车',
+    filterMinKm: 0.5,
+    filterMaxKm: 15.0,
+    fallbackTiers: [3.0, 6.0, 10.0, 15.0],
+  },
+}
 
 // ==================== Haversine ====================
 function toRad(deg) { return (deg * Math.PI) / 180 }
@@ -27,16 +68,6 @@ export function haversineDistance(lat1, lng1, lat2, lng2) {
 }
 
 // ==================== 偏好配置 ====================
-
-/** 出行方式 → 二次精筛半径 (km)，上限硬封 10km */
-const TRANSPORT_RADIUS = {
-  walk:   { min: 0.3, max: 4.0 },
-  subway: { min: 1.0, max: 8.0 },
-  taxi:   { min: 2.0, max: 10.0 },
-}
-
-/** 逐级兜底 (km)，最远不超 10 */
-const FALLBACK_TIERS = [3, 6, 10]
 
 /** 时间 → 总地点数 */
 const TIME_TO_COUNT = {
@@ -87,7 +118,7 @@ function getLM(item) {
 
 // ==================== 半径筛选 ====================
 
-export function filterByRadius(userLat, userLng, landmarks, minKm = 0.3, maxKm = 5.0) {
+export function filterByRadius(userLat, userLng, landmarks, minKm = 0.2, maxKm = 5.0) {
   return landmarks
     .map((lm) => ({ landmark: lm, distance: haversineDistance(userLat, userLng, lm.lat, lm.lng) }))
     .filter((item) => item.distance >= minKm && item.distance <= maxKm)
@@ -248,13 +279,20 @@ function pickByStyle(filtered, targetCategories, targetCount, style, excludeIds 
 
 // ==================== 最近邻排序 ====================
 
-export function orderByGreedy(picked, userLat, userLng) {
+/**
+ * @param {Array}  picked  被选中的地点列表
+ * @param {number} userLat / userLng
+ * @param {number} speed   出行方式速度 (m/s)，用于算 time
+ * @returns {Array} ordered route with walkingDist(km) + walkingTime(min)
+ */
+export function orderByGreedy(picked, userLat, userLng, speed = 1.2) {
   const points = [...picked]
   if (points.length === 0) return []
   if (points.length === 1) {
     const lm = getLM(points[0])
     const dist = haversineDistance(userLat, userLng, lm.lat, lm.lng)
-    return [{ ...points[0], walkingDist: dist, walkingTime: dist * 15 }]
+    // walkingDist=km, walkingTime=min
+    return [{ ...points[0], walkingDist: dist, walkingTime: (dist * 1000) / speed / 60 }]
   }
 
   let nearestIdx = 0, nearestDist = Infinity
@@ -264,7 +302,7 @@ export function orderByGreedy(picked, userLat, userLng) {
   })
 
   const first = points.splice(nearestIdx, 1)[0]
-  const ordered = [{ ...first, walkingDist: nearestDist, walkingTime: nearestDist * 15 }]
+  const ordered = [{ ...first, walkingDist: nearestDist, walkingTime: (nearestDist * 1000) / speed / 60 }]
 
   while (points.length > 0) {
     const lastLM = getLM(ordered[ordered.length - 1])
@@ -274,7 +312,7 @@ export function orderByGreedy(picked, userLat, userLng) {
       if (d < nextDist) { nextDist = d; nextIdx = i }
     })
     const next = points.splice(nextIdx, 1)[0]
-    ordered.push({ ...next, walkingDist: nextDist, walkingTime: nextDist * 15 })
+    ordered.push({ ...next, walkingDist: nextDist, walkingTime: (nextDist * 1000) / speed / 60 })
   }
 
   return ordered
@@ -282,12 +320,23 @@ export function orderByGreedy(picked, userLat, userLng) {
 
 // ==================== 路线总览 ====================
 
+/**
+ * @param {Array}  orderedRoute
+ * @param {object} preferences  { transport, style, time }
+ * @returns {{ totalWalkingDist, totalStayTime, totalTime, totalStops, routeSummary }}
+ */
 export function computeSummary(orderedRoute, preferences = null) {
+  const transport = preferences?.transport || 'walk'
+  const tConfig = TRANSPORT_CONFIG[transport] || TRANSPORT_CONFIG.walk
+  const speed = tConfig.speed
+  const travelLabel = tConfig.label
+
   const stayMultiplier = preferences ? (STYLE_STAY_MULTIPLIER[preferences.style] || 1.0) : 1.0
   const totalWalkingDist = orderedRoute.reduce((sum, s) => sum + (s.walkingDist || 0), 0)
   const totalStayTime = orderedRoute.reduce((sum, s) => sum + Math.round(((getLM(s).suggestedStay || 30) * stayMultiplier)), 0)
-  const walkingTime = totalWalkingDist * 15
-  const totalTime = Math.round((walkingTime + totalStayTime) * 1.2)
+  // walkingTime = dist(km) * 1000 / speed(m/s) / 60 → 分钟
+  const travelTime = totalWalkingDist * 1000 / speed / 60
+  const totalTime = Math.round((travelTime + totalStayTime) * 1.2)
 
   const routeSummary = orderedRoute.map((s, idx) => {
     const lm = getLM(s)
@@ -298,12 +347,31 @@ export function computeSummary(orderedRoute, preferences = null) {
       photoUrl: lm.photos?.[0] || null, photos: lm.photos || [],
       address: lm.address || '', rating: lm.rating || null, cost: lm.cost || null,
       walkingFromPrev: s.walkingDist
-        ? `${(s.walkingDist * 1000).toFixed(0)}m (约${Math.round(s.walkingTime)}分钟步行)`
+        ? `${(s.walkingDist * 1000).toFixed(0)}m (约${Math.round(s.walkingTime)}分钟${travelLabel})`
         : '出发点',
     }
   })
 
   return { totalWalkingDist: Math.round(totalWalkingDist * 1000), totalStayTime, totalTime, totalStops: orderedRoute.length, routeSummary }
+}
+
+// ==================== 总里程校验 ====================
+
+/**
+ * 计算排序后路线的总 haversine 距离 (km)
+ */
+function calcTotalDistance(orderedRoute) {
+  return orderedRoute.reduce((sum, s) => sum + (s.walkingDist || 0), 0)
+}
+
+/**
+ * 校验路线是否在出行方式的单日里程限制内
+ * @returns {boolean}
+ */
+function routeWithinLimit(orderedRoute, tConfig) {
+  const totalKm = calcTotalDistance(orderedRoute)
+  const totalMeters = totalKm * 1000
+  return totalMeters <= tConfig.maxDailyDistance
 }
 
 // ==================== 主导出 ====================
@@ -316,121 +384,155 @@ export function computeSummary(orderedRoute, preferences = null) {
  * @returns {{ success, orderedRoute?, summary?, days?, error? }}
  */
 export function generateRoute(userLat, userLng, landmarks, preferences = null, excludeIds = []) {
-  let radiusConfig = { min: 0.3, max: 5.0 }
-  let targetCount = 3, targetCategories = ['culture', 'cafe', 'park'], style = null, timeBudget = '2h', transport = 'walk'
+  const transport = preferences?.transport || 'walk'
+  const tConfig = TRANSPORT_CONFIG[transport] || TRANSPORT_CONFIG.walk
+  let targetCount = 3, targetCategories = ['culture', 'cafe', 'park'], style = null, timeBudget = '2h'
 
   if (preferences) {
-    radiusConfig = TRANSPORT_RADIUS[preferences.transport] || radiusConfig
     targetCount = TIME_TO_COUNT[preferences.time] || targetCount
     timeBudget = preferences.time || '2h'
-    transport = preferences.transport || 'walk'
     targetCategories = [...(STYLE_CATEGORIES[preferences.style] || ['culture', 'cafe', 'park'])]
     shuffle(targetCategories)
     style = preferences.style
   }
 
-  // Step 1: 半径筛选 → 逐级兜底
-  let filtered = filterByRadius(userLat, userLng, landmarks, radiusConfig.min, radiusConfig.max)
+  // Step 1: 半径筛选 (使用出行方式配置的动态上下限) → 逐级兜底
+  let filtered = filterByRadius(userLat, userLng, landmarks, tConfig.filterMinKm, tConfig.filterMaxKm)
   if (filtered.length < targetCount) {
-    for (const tierKm of FALLBACK_TIERS) {
-      filtered = filterByRadius(userLat, userLng, landmarks, 0.3, tierKm)
+    for (const tierKm of tConfig.fallbackTiers) {
+      filtered = filterByRadius(userLat, userLng, landmarks, tConfig.filterMinKm, tierKm)
       if (filtered.length >= targetCount) break
+    }
+    // 最后一搏：不设上限
+    if (filtered.length < targetCount) {
+      filtered = filterByRadius(userLat, userLng, landmarks, 0, tConfig.filterMaxKm)
     }
   }
 
   if (filtered.length < 2) {
-    return { success: false, error: '附近 10km 内找不到足够地标，换个位置试试吧~' }
+    return { success: false, error: `附近 ${tConfig.filterMaxKm}km 内找不到足够地标，换个位置试试吧~` }
   }
 
   // Step 2: 多天路线 → 分天处理
   const isMultiDay = timeBudget === '1d' || timeBudget === '2d'
   if (isMultiDay) {
-    return buildMultiDayRoute(filtered, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, userLat, userLng)
+    return buildMultiDayRoute(filtered, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, userLat, userLng, tConfig)
   }
 
-  // Step 3: 单天路线
-  return buildSingleRoute(filtered, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, userLat, userLng)
+  // Step 3: 单天路线 (含里程校验重试)
+  return buildSingleRoute(filtered, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, userLat, userLng, tConfig)
 }
 
-function buildSingleRoute(filtered, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, userLat, userLng) {
-  let picked
+// ==================== 单天路线 (含里程校验重试) ====================
 
-  if (preferences) {
-    picked = pickByStyle(filtered, targetCategories, targetCount, style, excludeIds, timeBudget)
-  } else {
-    const pm = pickOnePerCategory(filtered, excludeIds)
-    if (pm) { picked = Object.values(pm) }
-    else {
-      const fb = ['culture', 'cafe', 'park']; shuffle(fb)
-      picked = pickByStyle(filtered, fb, 2, null, excludeIds, timeBudget)
+const MAX_RETRIES = 30
+
+function buildSingleRoute(filtered, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, userLat, userLng, tConfig) {
+  const speed = tConfig.speed
+  const maxDailyMeters = tConfig.maxDailyDistance
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    let picked
+
+    if (preferences) {
+      picked = pickByStyle(filtered, targetCategories, targetCount, style, excludeIds, timeBudget)
+    } else {
+      const pm = pickOnePerCategory(filtered, excludeIds)
+      if (pm) { picked = Object.values(pm) }
+      else {
+        const fb = ['culture', 'cafe', 'park']; shuffle(fb)
+        picked = pickByStyle(filtered, fb, 2, null, excludeIds, timeBudget)
+      }
     }
-  }
 
-  if (!picked || picked.length < 2) {
-    picked = pickByStyle(filtered, targetCategories, Math.max(targetCount, 2), style, [], timeBudget)
     if (!picked || picked.length < 2) {
-      return { success: false, error: '找不到足够多的不同地点，请换个区域试试' }
+      picked = pickByStyle(filtered, targetCategories, Math.max(targetCount, 2), style, [], timeBudget)
+      if (!picked || picked.length < 2) {
+        return { success: false, error: '找不到足够多的不同地点，请换个区域试试' }
+      }
     }
+
+    const ordered = orderByGreedy(picked, userLat, userLng, speed)
+
+    // 里程校验
+    if (routeWithinLimit(ordered, tConfig)) {
+      return {
+        success: true,
+        route: ordered.map((s) => getLM(s)),
+        orderedRoute: ordered,
+        summary: computeSummary(ordered, preferences),
+      }
+    }
+
+    const totalMeters = Math.round(calcTotalDistance(ordered) * 1000)
+    console.log(`[RouteGen] 路线 ${totalMeters}m > 限制 ${maxDailyMeters}m，重试 (${attempt + 1}/${MAX_RETRIES})`)
   }
 
-  const ordered = orderByGreedy(picked, userLat, userLng)
-  return {
-    success: true,
-    route: ordered.map((s) => getLM(s)),
-    orderedRoute: ordered,
-    summary: computeSummary(ordered, preferences),
-  }
+  return { success: false, error: `无法在${tConfig.label} ${(maxDailyMeters / 1000).toFixed(1)}km 限制内生成路线，请扩容出行方式或换个区域` }
 }
 
-/** 多天路线：一次性抽取全部地点 → 按天分组 → 每天独立最近邻排序 */
-function buildMultiDayRoute(filtered, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, userLat, userLng) {
+/** 多天路线：一次性抽取全部地点 → 按天分组 → 每天独立最近邻排序 + 独立里程校验 */
+function buildMultiDayRoute(filtered, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, userLat, userLng, tConfig) {
   const split = DAY_SPLITS[timeBudget] || [4, 4]
   const dayLabels = ['Day 1', 'Day 2']
+  const speed = tConfig.speed
 
-  // 一次性抽取全部 targetCount 个地点
-  let picked
-  if (preferences) {
-    picked = pickByStyle(filtered, targetCategories, targetCount, style, excludeIds, timeBudget)
-  } else {
-    const fb = ['culture', 'cafe', 'park']; shuffle(fb)
-    picked = pickByStyle(filtered, fb, targetCount, null, excludeIds, timeBudget)
-  }
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    // 一次性抽取全部 targetCount 个地点
+    let picked
+    if (preferences) {
+      picked = pickByStyle(filtered, targetCategories, targetCount, style, excludeIds, timeBudget)
+    } else {
+      const fb = ['culture', 'cafe', 'park']; shuffle(fb)
+      picked = pickByStyle(filtered, fb, targetCount, null, excludeIds, timeBudget)
+    }
 
-  if (!picked || picked.length < split[0] + 1) {
-    picked = pickByStyle(filtered, targetCategories, targetCount, style, [], timeBudget)
     if (!picked || picked.length < split[0] + 1) {
-      return { success: false, error: '附近地标不够组成多天路线，试试单天方案' }
+      picked = pickByStyle(filtered, targetCategories, targetCount, style, [], timeBudget)
+      if (!picked || picked.length < split[0] + 1) {
+        return { success: false, error: '附近地标不够组成多天路线，试试单天方案' }
+      }
+    }
+
+    // 按用户距离分组：最近的一半归 Day1，较远的一半归 Day2
+    const withDist = picked.map((p) => ({
+      ...p,
+      _udist: haversineDistance(userLat, userLng, getLM(p).lat, getLM(p).lng),
+    }))
+    withDist.sort((a, b) => a._udist - b._udist)
+
+    const day1Pool = withDist.slice(0, split[0])
+    const day2Pool = withDist.slice(split[0], split[0] + split[1])
+
+    // 每天独立最近邻排序
+    const day1Ordered = orderByGreedy(day1Pool, userLat, userLng, speed)
+    const day2Ordered = orderByGreedy(day2Pool, userLat, userLng, speed)
+
+    // 每天独立里程校验
+    if (!routeWithinLimit(day1Ordered, tConfig) || !routeWithinLimit(day2Ordered, tConfig)) {
+      const d1 = Math.round(calcTotalDistance(day1Ordered) * 1000)
+      const d2 = Math.round(calcTotalDistance(day2Ordered) * 1000)
+      console.log(`[RouteGen] 多天路线 ${d1}m / ${d2}m 超出限制，重试 (${attempt + 1}/${MAX_RETRIES})`)
+      continue
+    }
+
+    const day1Summary = computeSummary(day1Ordered, preferences)
+    const day2Summary = computeSummary(day2Ordered, preferences)
+
+    const allOrdered = [...day1Ordered, ...day2Ordered]
+    const totalSummary = computeSummary(allOrdered, preferences)
+
+    return {
+      success: true,
+      route: allOrdered.map((s) => getLM(s)),
+      orderedRoute: allOrdered,
+      summary: totalSummary,
+      days: [
+        { label: dayLabels[0], orderedRoute: day1Ordered, summary: day1Summary },
+        { label: dayLabels[1], orderedRoute: day2Ordered, summary: day2Summary },
+      ],
     }
   }
 
-  // 按用户距离分组：最近的一半归 Day1，较远的一半归 Day2
-  const withDist = picked.map((p) => ({
-    ...p,
-    _udist: haversineDistance(userLat, userLng, getLM(p).lat, getLM(p).lng),
-  }))
-  withDist.sort((a, b) => a._udist - b._udist)
-
-  const day1Pool = withDist.slice(0, split[0])
-  const day2Pool = withDist.slice(split[0], split[0] + split[1])
-
-  // 每天独立最近邻排序
-  const day1Ordered = orderByGreedy(day1Pool, userLat, userLng)
-  const day2Ordered = orderByGreedy(day2Pool, userLat, userLng)
-
-  const day1Summary = computeSummary(day1Ordered, preferences)
-  const day2Summary = computeSummary(day2Ordered, preferences)
-
-  const allOrdered = [...day1Ordered, ...day2Ordered]
-  const totalSummary = computeSummary(allOrdered, preferences)
-
-  return {
-    success: true,
-    route: allOrdered.map((s) => getLM(s)),
-    orderedRoute: allOrdered,
-    summary: totalSummary,
-    days: [
-      { label: dayLabels[0], orderedRoute: day1Ordered, summary: day1Summary },
-      { label: dayLabels[1], orderedRoute: day2Ordered, summary: day2Summary },
-    ],
-  }
+  return { success: false, error: `无法在${tConfig.label}限制内生成多天路线，请扩容出行方式或选单天方案` }
 }

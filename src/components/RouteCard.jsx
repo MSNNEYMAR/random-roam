@@ -15,6 +15,7 @@ import {
   Info,
   Image,
   Car,
+  Bike,
   TrainFront,
   Zap,
   CalendarDays,
@@ -65,8 +66,9 @@ const categoryMeta = {
 
 const TRANSPORT_META = {
   walk:   { icon: Footprints, label: '步行', statLabel: '步行距离', betweenLabel: '步行前往下一站' },
-  subway: { icon: TrainFront,  label: '地铁', statLabel: '总距离',   betweenLabel: '搭乘地铁前往下一站' },
-  taxi:   { icon: Car,        label: '打车', statLabel: '总距离',   betweenLabel: '打车前往下一站' },
+  cycle:  { icon: Bike,       label: '骑行', statLabel: '骑行距离', betweenLabel: '骑行前往下一站' },
+  subway: { icon: TrainFront, label: '地铁', statLabel: '总距离',   betweenLabel: '搭乘地铁前往下一站' },
+  drive:  { icon: Car,        label: '打车', statLabel: '总距离',   betweenLabel: '打车前往下一站' },
 }
 
 const STYLE_META = {

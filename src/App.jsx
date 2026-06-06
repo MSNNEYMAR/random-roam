@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import HomePage from './components/HomePage'
 import RouteCard from './components/RouteCard'
-import { generateRoute, computeSummary } from './utils/routeGenerator'
+import { generateRoute, computeSummary, TRANSPORT_CONFIG } from './utils/routeGenerator'
 import { fetchLandmarksByPosition, addToHistory, getHistoryPoiIds } from './api/placesApi'
-import { reverseGeocode, fetchWalkingRoute } from './api/amapAdapter'
+import { reverseGeocode, fetchWalkingRoute, geocodeCity } from './api/amapAdapter'
 import { PROVIDER_CONFIG, CURRENT_PROVIDER } from './api/providers'
 
 /**
- * 应用主组件 — 100% 高德 API 驱动，同城周边 10km
+ * 应用主组件 — 100% 高德 API 驱动，全国通用，基于用户实时位置 + 出行方式动态搜索半径
  */
 export default function App() {
   const [page, setPage] = useState('home')
@@ -79,7 +79,10 @@ export default function App() {
     setPage('loading')
 
     try {
-      const landmarks = await fetchLandmarksByPosition(coords.lat, coords.lng)
+      // 根据出行方式动态决定 API 搜索半径
+      const transport = prefs?.transport || 'walk'
+      const tConfig = TRANSPORT_CONFIG[transport] || TRANSPORT_CONFIG.walk
+      const landmarks = await fetchLandmarksByPosition(coords.lat, coords.lng, tConfig.searchRadius)
       const result = generateRoute(coords.lat, coords.lng, landmarks, prefs, excludeIds)
 
       if (!result.success) {
@@ -88,8 +91,8 @@ export default function App() {
         return
       }
 
-      // 步行模式下用真实步行 API 丰富
-      const isWalkMode = !prefs || prefs.transport === 'walk'
+      // 仅步行模式下用真实步行 API 丰富路径（骑行/打车用 haversine + 速度系数）
+      const isWalkMode = prefs?.transport === 'walk'
       const apiKey = PROVIDER_CONFIG[CURRENT_PROVIDER]?.apiKey
       if (isWalkMode && apiKey && apiKey !== 'YOUR_AMAP_WEB_SERVICE_KEY') {
         result.orderedRoute = await enrichWithWalking(result.orderedRoute, coords.lat, coords.lng, apiKey)
@@ -113,10 +116,24 @@ export default function App() {
       setPage('route')
     } catch (err) {
       console.error('路线生成异常:', err)
-      alert('出了点问题，请检查网络后重试')
+      alert('出了点问题，请检查网络后重试\n\n错误详情: ' + (err?.message || err))
       setPage('home')
     }
   }, [recordUsedIds])
+
+  // ==================== 城市搜索降级 ====================
+  const handleCitySearch = useCallback(async (cityName) => {
+    const apiKey = PROVIDER_CONFIG[CURRENT_PROVIDER]?.apiKey
+    if (!apiKey || apiKey === 'YOUR_AMAP_WEB_SERVICE_KEY') {
+      throw new Error('API Key 未配置')
+    }
+    const result = await geocodeCity(cityName, apiKey)
+    if (!result) {
+      throw new Error(`找不到城市"${cityName}"，请换个名称试试`)
+    }
+    setUserCoords({ lat: result.lat, lng: result.lng })
+    setLocationInfo(result.address || cityName)
+  }, [])
 
   // ==================== 按钮回调 ====================
   const handleStartRoam = useCallback((prefs) => {
@@ -145,7 +162,7 @@ export default function App() {
 
       <div className="relative z-10 h-full">
         {(page === 'home' || page === 'loading') && (
-          <HomePage onStartRoam={handleStartRoam} isLoading={page === 'loading'} locationInfo={locationInfo} />
+          <HomePage onStartRoam={handleStartRoam} isLoading={page === 'loading'} locationInfo={locationInfo} userCoords={userCoords} onCitySearch={handleCitySearch} />
         )}
         {page === 'route' && routeData && (
           <RouteCard routeData={routeData} preferences={preferences} onBack={handleBack} onRegenerate={handleRegenerate} />

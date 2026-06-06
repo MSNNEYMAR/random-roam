@@ -44,10 +44,38 @@ export function addToHistory(newIds) {
 }
 
 /**
- * 生成随机搜索半径: 2500–4500 米
+ * 静态地标兜底：只在 API 失败时使用，且必须按用户位置过滤
  */
-function randomRadius() {
-  return Math.floor(Math.random() * 2000) + 2500
+function getFilteredFallback(userLat, userLng) {
+  const tierRadii = [5, 15, 50, 200]  // 逐级扩大
+
+  for (const maxKm of tierRadii) {
+    const nearby = LANDMARKS.filter(lm => {
+      const d = haversineDistance(userLat, userLng, lm.lat, lm.lng)
+      return d >= 0.3 && d <= maxKm
+    })
+    if (nearby.length >= 6) {
+      console.log(`[RandomRoam] 静态兜底: ${maxKm}km 范围内找到 ${nearby.length} 个地标`)
+      return nearby
+    }
+  }
+
+  // 实在没有则返回前 10 个最近的
+  console.warn('[RandomRoam] 200km 内无地标，返回最近 10 个')
+  return [...LANDMARKS]
+    .map(lm => ({ ...lm, _dist: haversineDistance(userLat, userLng, lm.lat, lm.lng) }))
+    .sort((a, b) => a._dist - b._dist)
+    .slice(0, 10)
+    .map(({ _dist, ...lm }) => lm)
+}
+
+function haversineDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371
+  const toRad = (deg) => (deg * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
 // ==================== 分类映射 ====================
@@ -134,12 +162,13 @@ export async function fetchLandmarksByPosition(lat, lng) {
         const config = PROVIDER_CONFIG.amap
         if (!config.apiKey || config.apiKey === 'YOUR_AMAP_WEB_SERVICE_KEY') {
           console.warn('[RandomRoam] 未配置高德 API Key，使用模拟数据')
-          return LANDMARKS
+          console.warn('[RandomRoam] API 不可用，使用静态地标（已按位置过滤）')
+          return getFilteredFallback(lat, lng)
         }
 
-        // 四个类别并行请求，使用随机半径（2500-4500m 之间扰动）
-        const searchRadius = randomRadius()
-        console.log(`[RandomRoam] 随机搜索半径: ${searchRadius}m`)
+        // 四个类别并行请求，固定 5000m 周边搜索
+        const searchRadius = config.radius || 5000
+        console.log(`[RandomRoam] 高德周边搜索: radius=${searchRadius}m, location=${lng},${lat}`)
 
         const [cultureResults, cafeResults, parkResults, foodResults] = await Promise.all([
           fetchFromAmap(lat, lng, config.typeMap.culture, searchRadius, config.apiKey),
@@ -162,7 +191,8 @@ export async function fetchLandmarksByPosition(lat, lng) {
         const config = PROVIDER_CONFIG.google
         if (!config.apiKey || config.apiKey === 'YOUR_GOOGLE_API_KEY') {
           console.warn('[RandomRoam] 未配置 Google API Key，使用模拟数据')
-          return LANDMARKS
+          console.warn('[RandomRoam] API 不可用，使用静态地标（已按位置过滤）')
+          return getFilteredFallback(lat, lng)
         }
 
         const [cultureResults, cafeResults, parkResults] = await Promise.all([
@@ -180,7 +210,8 @@ export async function fetchLandmarksByPosition(lat, lng) {
       }
 
       default: // 'mock' 或其他
-        return LANDMARKS
+        console.warn('[RandomRoam] API 不可用，使用静态地标（已按位置过滤）')
+          return getFilteredFallback(lat, lng)
     }
 
     // 标准化所有结果
@@ -218,6 +249,7 @@ export async function fetchLandmarksByPosition(lat, lng) {
     return landmarks
   } catch (err) {
     console.error('[RandomRoam] API 调用失败，降级到模拟数据:', err.message)
-    return LANDMARKS
+    console.warn('[RandomRoam] API 不可用，使用静态地标（已按位置过滤）')
+          return getFilteredFallback(lat, lng)
   }
 }

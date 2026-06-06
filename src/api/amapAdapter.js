@@ -122,17 +122,17 @@ function isIrrelevantPOI(poi) {
  * @returns {Promise<Array<{name, lat, lng, address, description}>>}
  */
 export async function fetchFromAmap(lat, lng, keywords, radius, apiKey) {
-  // 高德 API 要求的坐标顺序是 longitude,latitude
+  // place/around 周边搜索：location 圆心 + radius 半径天然限定范围，无需 citylimit
   const location = `${lng},${lat}`
 
   const params = new URLSearchParams({
     key: apiKey,
     location,
-    radius: String(radius),
+    radius: String(radius),    // 严格 N 米内的结果
     keywords,
-    offset: '30',       // 每类最多取 30 个结果，扩大备选池
+    offset: '30',
     page: '1',
-    extensions: 'all',  // 返回详细信息
+    extensions: 'all',
   })
 
   const url = `${AMAP_BASE}/v3/place/around?${params.toString()}`

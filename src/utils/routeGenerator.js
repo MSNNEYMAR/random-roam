@@ -41,14 +41,21 @@ export function haversineDistance(lat1, lng1, lat2, lng2) {
 // ==================== 偏好配置 ====================
 
 /**
- * 出行方式 → 搜索半径
+ * 出行方式 → 地标筛选半径 (km)
+ * 注意：高德 API 端已用 radius=5000m 圈定周边，这里仅做二次精筛
  */
 const TRANSPORT_RADIUS = {
-  walk:   { min: 2.0, max: 5.5 },
-  subway: { min: 3.0, max: 12.0 },
-  taxi:   { min: 5.0, max: 25.0 },
-  train:  { min: 8.0, max: 80.0 },   // 高铁/火车：跨城范围
+  walk:   { min: 0.3, max: 4.0 },
+  subway: { min: 1.0, max: 8.0 },
+  taxi:   { min: 2.0, max: 18.0 },
+  train:  { min: 5.0, max: 60.0 },
 }
+
+/**
+ * 用户附近无地标时的逐级兜底距离 (km)
+ * 每级尝试更大的范围，直到找到足够地标
+ */
+const FALLBACK_RADIUS_TIERS = [5, 15, 50, 200]
 
 /**
  * 时间预算 → 目标地标数量 + 餐饮最低数量
@@ -638,35 +645,26 @@ export function generateRoute(userLat, userLng, landmarks, preferences = null, e
   }
 
   // ===== Step 1: 距离筛选 =====
-  const filtered = filterByRadius(userLat, userLng, landmarks, radiusConfig.min, radiusConfig.max)
+  let filtered = filterByRadius(userLat, userLng, landmarks, radiusConfig.min, radiusConfig.max)
+  let categoriesInRange = new Set(filtered.map((f) => getLM(f).category))
+  let neededCats = targetCategories.filter((c) => !categoriesInRange.has(c))
 
-  // 如果范围内地标不够，放宽距离上限再试
-  const categoriesInRange = new Set(filtered.map((f) => f.landmark.category))
-  const neededCats = targetCategories.filter((c) => !categoriesInRange.has(c))
-
+  // 逐级扩大半径兜底（不全局撒网）
   if (neededCats.length > 0 || filtered.length < targetCount) {
-    const expandedMax = Math.max(radiusConfig.max * 1.6, 15)
-    const fallback = filterByRadius(userLat, userLng, landmarks, 1.0, expandedMax)
-    const fallbackCats = new Set(fallback.map((f) => f.landmark.category))
-    const stillMissing = targetCategories.filter((c) => !fallbackCats.has(c))
+    for (const tierKm of FALLBACK_RADIUS_TIERS) {
+      filtered = filterByRadius(userLat, userLng, landmarks, 0.5, tierKm)
+      categoriesInRange = new Set(filtered.map((f) => getLM(f).category))
+      neededCats = targetCategories.filter((c) => !categoriesInRange.has(c))
 
-    if (stillMissing.length === targetCategories.length || fallback.length < 2) {
-      // 最终兜底：放弃距离限制，使用全部地标按距离排序取最近的
-      const global = landmarks
-        .map((lm) => ({
-          landmark: lm,
-          distance: haversineDistance(userLat, userLng, lm.lat, lm.lng),
-        }))
-        .sort((a, b) => a.distance - b.distance)
-
-      if (global.length < 2) {
-        return { success: false, error: '附近地标数据不足，换个位置试试吧~' }
-      }
-
-      return buildRouteWithPreferences(global, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, transport, userLat, userLng)
+      if (filtered.length >= targetCount && neededCats.length === 0) break
+      // 类别不全但数量够也继续
+      if (filtered.length >= targetCount) break
     }
+  }
 
-    return buildRouteWithPreferences(fallback, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, transport, userLat, userLng)
+  // 所有兜底尝试后仍然不够
+  if (filtered.length < 2) {
+    return { success: false, error: '附近找不到足够地标，试试扩大时间或换成高铁出行' }
   }
 
   return buildRouteWithPreferences(filtered, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, transport, userLat, userLng)

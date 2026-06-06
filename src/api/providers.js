@@ -14,7 +14,7 @@ export const PROVIDER_CONFIG = {
     // 高德 Web服务 API Key → 去 https://console.amap.com/dev/ 申请
     apiKey: '2eddcc5161801eaa3a51f1e09fa412a1',
     // 搜索半径 (米)
-    radius: 5000,
+    radius: 10000,
     // POI 类型映射 (高德分类编码)
     typeMap: {
       culture: '博物馆|美术馆|展览馆|文化宫|名胜古迹|教堂|寺庙|名人故居|历史建筑|纪念馆|景区',
@@ -28,7 +28,7 @@ export const PROVIDER_CONFIG = {
     // Google Cloud API Key → 去 https://console.cloud.google.com/ 申请
     // 需要启用 Places API
     apiKey: 'YOUR_GOOGLE_API_KEY',
-    radius: 5000,
+    radius: 10000,
     // Place Types → https://developers.google.com/maps/documentation/places/web-service/supported_types
     typeMap: {
       culture: 'museum|art_gallery|church|hindu_temple|mosque|tourist_attraction',

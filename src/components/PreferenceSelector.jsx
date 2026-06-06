@@ -3,7 +3,6 @@ import {
   Footprints,
   TrainFront,
   Car,
-  Train,
   Sparkles,
   ChevronLeft,
   Zap,
@@ -24,7 +23,6 @@ const CATEGORIES = [
       { value: 'walk',    label: '步行', icon: Footprints },
       { value: 'subway',  label: '地铁', icon: TrainFront },
       { value: 'taxi',    label: '打车', icon: Car },
-      { value: 'train',   label: '高铁', icon: Train },
     ],
   },
   {

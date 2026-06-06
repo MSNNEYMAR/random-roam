@@ -15,9 +15,9 @@ import {
   Info,
   Image,
   Car,
-  Train,
   TrainFront,
   Zap,
+  CalendarDays,
   Heart,
   Eye,
   Wallet,
@@ -67,7 +67,6 @@ const TRANSPORT_META = {
   walk:   { icon: Footprints, label: '步行', statLabel: '步行距离', betweenLabel: '步行前往下一站' },
   subway: { icon: TrainFront,  label: '地铁', statLabel: '总距离',   betweenLabel: '搭乘地铁前往下一站' },
   taxi:   { icon: Car,        label: '打车', statLabel: '总距离',   betweenLabel: '打车前往下一站' },
-  train:  { icon: Train,      label: '高铁', statLabel: '总距离',   betweenLabel: '乘高铁前往下一站' },
 }
 
 const STYLE_META = {
@@ -79,8 +78,99 @@ const STYLE_META = {
   budget:   { icon: Wallet,    label: '穷游模式', color: 'text-amber-400',   bg: 'bg-amber-400/10' },
 }
 
+/** 抽取出的单张地点卡片，被单天和多天共用 */
+function StepCard({ idx, step, metaColor, metaLabel, metaBg, metaBorder, metaGradient, metaPhotoBorder,
+  Icon, isExpanded, isLast, photoUrl, hasPhoto, loadedPhotos, setLoadedPhotos, setExpandedIndex,
+  TransportIcon, transportMeta }) {
+  return (
+    <div
+      className={`relative pl-10 md:pl-12 ${isLast ? '' : 'mb-5 md:mb-6'} animate-fade-in`}
+      style={{ animationDelay: `${0.2 + idx * 0.15}s` }}
+    >
+      <div className={`absolute left-[7px] w-[18px] h-[18px] md:w-5 md:h-5 rounded-full border-2 z-10 ${metaBorder} ${metaBg}`} style={{ top: '4px' }}>
+        <div className={`w-2 h-2 md:w-2.5 md:h-2.5 rounded-full ${metaColor.replace('text', 'bg')} m-auto mt-[2px] md:mt-[3px]`} />
+      </div>
+
+      <div onClick={setExpandedIndex} className={`glass-card rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 hover:bg-white/[0.06] ${isExpanded ? 'bg-white/[0.06]' : ''}`}>
+        {hasPhoto && (
+          <div className={`relative w-full h-40 md:h-52 overflow-hidden border-b ${metaPhotoBorder}`}>
+            {!loadedPhotos[photoUrl] && (
+              <div className="absolute inset-0 bg-white/[0.02] flex items-center justify-center">
+                <Image size={28} className="text-white/20 animate-pulse md:!w-8 md:!h-8" />
+              </div>
+            )}
+            <img src={photoUrl} alt={step.name}
+              className={`w-full h-full object-cover transition-opacity duration-500 ${loadedPhotos[photoUrl] ? 'opacity-100' : 'opacity-0'}`}
+              onLoad={() => setLoadedPhotos(prev => ({ ...prev, [photoUrl]: true }))}
+              onError={(e) => { e.target.style.display = 'none'; setLoadedPhotos(prev => ({ ...prev, [photoUrl]: 'error' })) }} />
+            <div className={`absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t ${metaGradient}`} />
+          </div>
+        )}
+
+        <div className="p-4 md:p-5">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3 md:gap-4">
+              <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl ${metaBg} flex items-center justify-center shrink-0`}>
+                <Icon size={18} className={`${metaColor} md:!w-5 md:!h-5`} />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-white/20 text-xs md:text-sm font-mono">#{idx + 1}</span>
+                  <span className={`text-[10px] md:text-xs px-2 py-0.5 rounded-full ${metaBg} ${metaColor}`}>{metaLabel}</span>
+                  {step.rating && <span className="text-[10px] md:text-xs text-white/30">⭐ {step.rating}</span>}
+                  {step.cost != null && step.cost > 0 && <span className="text-[10px] md:text-xs text-white/25">¥{step.cost}</span>}
+                  {step.cost === 0 && <span className="text-[10px] md:text-xs text-emerald-400/60">免费</span>}
+                </div>
+                <h3 className="text-white/85 text-base md:text-lg font-medium mt-1 truncate">{step.name}</h3>
+                {step.address && <p className="text-white/20 text-[11px] md:text-sm mt-0.5 truncate">{step.address}</p>}
+              </div>
+            </div>
+            <ChevronRight size={16} className={`text-white/30 mt-2 shrink-0 transition-transform duration-300 md:!w-5 md:!h-5 ${isExpanded ? 'rotate-90' : ''}`} />
+          </div>
+
+          <div className="flex items-center gap-4 mt-3 ml-[52px] md:ml-[60px]">
+            <div className="flex items-center gap-1 text-white/30 text-xs md:text-sm">
+              <TransportIcon size={12} className="md:!w-3.5 md:!h-3.5" />
+              <span>{step.walkingFromPrev}</span>
+            </div>
+            <div className="flex items-center gap-1 text-white/30 text-xs md:text-sm">
+              <Clock size={12} className="md:!w-3.5 md:!h-3.5" />
+              <span>建议停留 {step.stayMinutes} 分钟</span>
+            </div>
+          </div>
+        </div>
+
+        <div className={`overflow-hidden transition-all duration-300 ${isExpanded ? 'max-h-80 md:max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
+          <div className="px-4 md:px-5 pb-4 md:pb-5 ml-[52px] md:ml-[60px] border-t border-white/[0.04] pt-3">
+            <p className="text-white/45 text-sm md:text-base leading-relaxed">{step.description}</p>
+            <div className="flex items-start gap-1.5 mt-3 bg-white/[0.02] rounded-xl p-3 md:p-4">
+              <Info size={14} className="text-amber-400/50 mt-0.5 shrink-0 md:!w-4 md:!h-4" />
+              <p className="text-white/35 text-xs md:text-sm leading-relaxed">{step.tip}</p>
+            </div>
+            {step.photos && step.photos.length > 1 && (
+              <div className="flex gap-2 mt-3 overflow-x-auto pb-1">
+                {step.photos.map((url, i) => (
+                  <img key={i} src={url} alt={`${step.name} ${i + 1}`}
+                    className="w-24 h-16 md:w-32 md:h-20 rounded-lg object-cover shrink-0 opacity-60 hover:opacity-100 transition-opacity border border-white/[0.04]" loading="lazy" />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {!isLast && (
+        <div className="flex items-center gap-2 ml-10 md:ml-12 my-2 text-white/15 text-[11px] md:text-xs">
+          <TransportIcon size={11} />
+          <span>{transportMeta.betweenLabel}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /**
- * 路线展示页 — 实景照片 + 真实步行数据 + 偏好展示 + 响应式
+ * 路线展示页 — 实景照片 + 真实步行数据 + 偏好展示 + 响应式 + 多天
  */
 export default function RouteCard({ routeData, preferences, onBack, onRegenerate }) {
   const [expandedIndex, setExpandedIndex] = useState(null)
@@ -200,179 +290,105 @@ export default function RouteCard({ routeData, preferences, onBack, onRegenerate
           </div>
         </div>
 
-        {/* 路线步骤 */}
-        <div className="route-line relative">
-          {summary.routeSummary.map((step, idx) => {
-            const meta = categoryMeta[step.category]
-            const Icon = meta?.icon || Building2
-            const metaBg = meta?.bg || 'bg-white/5'
-            const metaBorder = meta?.border || 'border-white/10'
-            const metaGradient = meta?.gradient || 'from-white/10 to-transparent'
-            const metaPhotoBorder = meta?.photoBorder || 'border-white/10'
-            const metaColor = meta?.color || 'text-white/40'
-            const metaLabel = meta?.label || '其他'
-            const isExpanded = expandedIndex === idx
-            const isLast = idx === summary.routeSummary.length - 1
-            const photoUrl = step.photoUrl
-            const hasPhoto = !!photoUrl
-
-            return (
-              <div
-                key={idx}
-                className={`relative pl-10 md:pl-12 ${isLast ? '' : 'mb-5 md:mb-6'} animate-fade-in`}
-                style={{ animationDelay: `${0.2 + idx * 0.15}s` }}
-              >
-                {/* 连接线圆点 */}
-                <div
-                  className={`
-                    absolute left-[7px] w-[18px] h-[18px] md:w-5 md:h-5 rounded-full border-2 z-10
-                    ${metaBorder} ${metaBg}
-                  `}
-                  style={{ top: '4px' }}
-                >
-                  <div className={`w-2 h-2 md:w-2.5 md:h-2.5 rounded-full ${metaColor.replace('text', 'bg')} m-auto mt-[2px] md:mt-[3px]`} />
-                </div>
-
-                {/* 地点卡片 */}
-                <div
-                  onClick={() => setExpandedIndex(isExpanded ? null : idx)}
-                  className={`
-                    glass-card rounded-2xl overflow-hidden cursor-pointer
-                    transition-all duration-300
-                    hover:bg-white/[0.06]
-                    ${isExpanded ? 'bg-white/[0.06]' : ''}
-                  `}
-                >
-                  {/* --- 实景照片 --- */}
-                  {hasPhoto && (
-                    <div className={`relative w-full h-40 md:h-52 overflow-hidden border-b ${metaPhotoBorder}`}>
-                      {!loadedPhotos[photoUrl] && (
-                        <div className="absolute inset-0 bg-white/[0.02] flex items-center justify-center">
-                          <Image size={28} className="text-white/20 animate-pulse md:!w-8 md:!h-8" />
-                        </div>
-                      )}
-                      <img
-                        src={photoUrl}
-                        alt={step.name}
-                        className={`w-full h-full object-cover transition-opacity duration-500 ${
-                          loadedPhotos[photoUrl] ? 'opacity-100' : 'opacity-0'
-                        }`}
-                        onLoad={() => setLoadedPhotos(prev => ({ ...prev, [photoUrl]: true }))}
-                        onError={(e) => {
-                          e.target.style.display = 'none'
-                          setLoadedPhotos(prev => ({ ...prev, [photoUrl]: 'error' }))
-                        }}
-                      />
-                      <div className={`absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t ${metaGradient}`} />
-                    </div>
-                  )}
-
-                  {/* 卡片主体 */}
-                  <div className="p-4 md:p-5">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3 md:gap-4">
-                        <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl ${metaBg} flex items-center justify-center shrink-0`}>
-                          <Icon size={18} className={`${metaColor} md:!w-5 md:!h-5`} />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-white/20 text-xs md:text-sm font-mono">
-                              #{idx + 1}
-                            </span>
-                            <span className={`text-[10px] md:text-xs px-2 py-0.5 rounded-full ${metaBg} ${metaColor}`}>
-                              {metaLabel}
-                            </span>
-                            {step.rating && (
-                              <span className="text-[10px] md:text-xs text-white/30">
-                                ⭐ {step.rating}
-                              </span>
-                            )}
-                            {step.cost != null && step.cost > 0 && (
-                              <span className="text-[10px] md:text-xs text-white/25">
-                                ¥{step.cost}
-                              </span>
-                            )}
-                            {step.cost === 0 && (
-                              <span className="text-[10px] md:text-xs text-emerald-400/60">免费</span>
-                            )}
-                          </div>
-                          <h3 className="text-white/85 text-base md:text-lg font-medium mt-1 truncate">
-                            {step.name}
-                          </h3>
-                          {step.address && (
-                            <p className="text-white/20 text-[11px] md:text-sm mt-0.5 truncate">
-                              {step.address}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <ChevronRight
-                        size={16}
-                        className={`text-white/30 mt-2 shrink-0 transition-transform duration-300 md:!w-5 md:!h-5 ${
-                          isExpanded ? 'rotate-90' : ''
-                        }`}
-                      />
-                    </div>
-
-                    {/* 交通 / 停留信息 */}
-                    <div className="flex items-center gap-4 mt-3 ml-[52px] md:ml-[60px]">
-                      <div className="flex items-center gap-1 text-white/30 text-xs md:text-sm">
-                        <TransportIcon size={12} className="md:!w-3.5 md:!h-3.5" />
-                        <span>{step.walkingFromPrev}</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-white/30 text-xs md:text-sm">
-                        <Clock size={12} className="md:!w-3.5 md:!h-3.5" />
-                        <span>建议停留 {step.stayMinutes} 分钟</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 展开详情 */}
-                  <div
-                    className={`
-                      overflow-hidden transition-all duration-300
-                      ${isExpanded ? 'max-h-80 md:max-h-96 opacity-100' : 'max-h-0 opacity-0'}
-                    `}
-                  >
-                    <div className="px-4 md:px-5 pb-4 md:pb-5 ml-[52px] md:ml-[60px] border-t border-white/[0.04] pt-3">
-                      <p className="text-white/45 text-sm md:text-base leading-relaxed">
-                        {step.description}
-                      </p>
-                      <div className="flex items-start gap-1.5 mt-3 bg-white/[0.02] rounded-xl p-3 md:p-4">
-                        <Info size={14} className="text-amber-400/50 mt-0.5 shrink-0 md:!w-4 md:!h-4" />
-                        <p className="text-white/35 text-xs md:text-sm leading-relaxed">
-                          {step.tip}
-                        </p>
-                      </div>
-
-                      {step.photos && step.photos.length > 1 && (
-                        <div className="flex gap-2 mt-3 overflow-x-auto pb-1">
-                          {step.photos.map((url, i) => (
-                            <img
-                              key={i}
-                              src={url}
-                              alt={`${step.name} ${i + 1}`}
-                              className="w-24 h-16 md:w-32 md:h-20 rounded-lg object-cover shrink-0 opacity-60 hover:opacity-100 transition-opacity border border-white/[0.04]"
-                              loading="lazy"
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* 地点间交通提示 */}
-                {!isLast && (
-                  <div className="flex items-center gap-2 ml-10 md:ml-12 my-2 text-white/15 text-[11px] md:text-xs">
-                    <TransportIcon size={11} />
-                    <span>{transportMeta.betweenLabel}</span>
-                  </div>
-                )}
+        {/* 路线步骤 — 多天则按天分组 */}
+        {routeData.days ? (
+          routeData.days.map((day, di) => (
+            <div key={di} className="mb-6">
+              {/* 天标题 */}
+              <div className="flex items-center gap-2 mb-3 px-1">
+                <CalendarDays size={16} className="text-amber-400/60" />
+                <span className="text-white/50 text-sm font-medium tracking-wide">
+                  {day.label}
+                </span>
+                <span className="text-white/20 text-xs">
+                  {day.summary.totalStops} 个地点 · {formatTotalTime(day.summary.totalTime)}
+                </span>
               </div>
-            )
-          })}
-        </div>
+
+              <div className="route-line relative">
+                {day.summary.routeSummary.map((step, idx) => {
+                  const meta = categoryMeta[step.category]
+                  const Icon = meta?.icon || Building2
+                  const metaBg = meta?.bg || 'bg-white/5'
+                  const metaBorder = meta?.border || 'border-white/10'
+                  const metaGradient = meta?.gradient || 'from-white/10 to-transparent'
+                  const metaPhotoBorder = meta?.photoBorder || 'border-white/10'
+                  const metaColor = meta?.color || 'text-white/40'
+                  const metaLabel = meta?.label || '其他'
+                  const isExpanded = expandedIndex === `${di}-${idx}`
+                  const isLast = idx === day.summary.routeSummary.length - 1
+                  const photoUrl = step.photoUrl
+                  const hasPhoto = !!photoUrl
+
+                  return (
+                    <StepCard
+                      key={`${di}-${idx}`}
+                      idx={idx}
+                      step={step}
+                      metaColor={metaColor}
+                      metaLabel={metaLabel}
+                      metaBg={metaBg}
+                      metaBorder={metaBorder}
+                      metaGradient={metaGradient}
+                      metaPhotoBorder={metaPhotoBorder}
+                      Icon={Icon}
+                      isExpanded={isExpanded}
+                      isLast={isLast}
+                      photoUrl={photoUrl}
+                      hasPhoto={hasPhoto}
+                      loadedPhotos={loadedPhotos}
+                      setLoadedPhotos={setLoadedPhotos}
+                      setExpandedIndex={() => setExpandedIndex(isExpanded ? null : `${di}-${idx}`)}
+                      TransportIcon={TransportIcon}
+                      transportMeta={transportMeta}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="route-line relative">
+            {summary.routeSummary.map((step, idx) => {
+              const meta = categoryMeta[step.category]
+              const Icon = meta?.icon || Building2
+              const metaBg = meta?.bg || 'bg-white/5'
+              const metaBorder = meta?.border || 'border-white/10'
+              const metaGradient = meta?.gradient || 'from-white/10 to-transparent'
+              const metaPhotoBorder = meta?.photoBorder || 'border-white/10'
+              const metaColor = meta?.color || 'text-white/40'
+              const metaLabel = meta?.label || '其他'
+              const isExpanded = expandedIndex === idx
+              const isLast = idx === summary.routeSummary.length - 1
+              const photoUrl = step.photoUrl
+              const hasPhoto = !!photoUrl
+
+              return (
+                <StepCard
+                  key={idx}
+                  idx={idx}
+                  step={step}
+                  metaColor={metaColor}
+                  metaLabel={metaLabel}
+                  metaBg={metaBg}
+                  metaBorder={metaBorder}
+                  metaGradient={metaGradient}
+                  metaPhotoBorder={metaPhotoBorder}
+                  Icon={Icon}
+                  isExpanded={isExpanded}
+                  isLast={isLast}
+                  photoUrl={photoUrl}
+                  hasPhoto={hasPhoto}
+                  loadedPhotos={loadedPhotos}
+                  setLoadedPhotos={setLoadedPhotos}
+                  setExpandedIndex={() => setExpandedIndex(isExpanded ? null : idx)}
+                  TransportIcon={TransportIcon}
+                  transportMeta={transportMeta}
+                />
+              )
+            })}
+          </div>
+        )}
 
         {/* 底部 */}
         <div

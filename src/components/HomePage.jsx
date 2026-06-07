@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, memo, lazy, Suspense } from 'react'
 import {
   MapPin,
   Navigation,
@@ -8,8 +8,12 @@ import {
   Footprints,
   Search,
   AlertTriangle,
+  History,
 } from 'lucide-react'
-import PreferenceSelector from './PreferenceSelector'
+import WalkingExplore from './illustrations/WalkingExplore'
+
+// 懒加载 PreferenceSelector — 仅在用户点击"开始漫游"后加载
+const PreferenceSelector = lazy(() => import('./PreferenceSelector'))
 
 /**
  * 首页 — 极简设计，中心"开始漫游"按钮 + 动态氛围背景
@@ -18,7 +22,7 @@ import PreferenceSelector from './PreferenceSelector'
  *          idle → citySearch (定位被拒时的降级)
  * 响应式: 移动端 (default) → 平板 (md:) → 桌面 (lg:)
  */
-export default function HomePage({ onStartRoam, isLoading, locationInfo, userCoords, onCitySearch }) {
+const HomePage = memo(function HomePage({ onStartRoam, isLoading, locationInfo, userCoords, onCitySearch, hasSavedRoute, onContinueRoute, weather, routeHistory, onLoadFromHistory }) {
   const [particles, setParticles] = useState([])
   const [displayText, setDisplayText] = useState('')
   const [phase, setPhase] = useState('idle')
@@ -177,12 +181,18 @@ export default function HomePage({ onStartRoam, isLoading, locationInfo, userCoo
   // ==================== 偏好选择阶段 ====================
   if (phase === 'preferences') {
     return (
-      <div className="relative h-full w-full">
-        <PreferenceSelector
-          onConfirm={handlePreferencesConfirm}
-          onBack={handleBackFromPreferences}
-        />
-      </div>
+      <Suspense fallback={
+        <div className="relative h-full flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-indigo-400/20 border-t-indigo-400/60 rounded-full animate-spin" />
+        </div>
+      }>
+        <div className="relative h-full w-full">
+          <PreferenceSelector
+            onConfirm={handlePreferencesConfirm}
+            onBack={handleBackFromPreferences}
+          />
+        </div>
+      </Suspense>
     )
   }
 
@@ -205,20 +215,13 @@ export default function HomePage({ onStartRoam, isLoading, locationInfo, userCoo
           />
         ))}
 
-        <div className="flex flex-col items-center gap-6 md:gap-8 animate-fade-in">
-          <div className="relative">
-            <div className="absolute inset-0 bg-indigo-400/20 rounded-full blur-3xl animate-breathe" />
-            <Compass
-              size={80}
-              className="text-indigo-300/60 relative z-10 animate-[spin_8s_linear_infinite] md:!w-24 md:!h-24"
-              strokeWidth={1}
-            />
+        <div className="flex flex-col items-center gap-5 md:gap-7 animate-fade-in">
+          <WalkingExplore size={200} className="opacity-80 md:scale-110" />
+          <div className="flex items-center gap-3 -mt-4">
+            <Loader2 size={22} className="text-indigo-400 animate-spin" />
+            <span className="text-white/45 text-base md:text-lg tracking-wider">正在生成路线</span>
           </div>
-          <div className="flex items-center gap-3">
-            <Loader2 size={28} className="text-indigo-400 animate-spin md:!w-8 md:!h-8" />
-            <span className="text-white/50 text-lg md:text-xl tracking-wider">正在生成路线</span>
-          </div>
-          <p className="text-white/20 text-xs md:text-sm tracking-wider">根据你的偏好定制中...</p>
+          <p className="text-white/18 text-xs md:text-sm tracking-wider -mt-2">根据你的偏好定制中...</p>
         </div>
       </div>
     )
@@ -244,9 +247,25 @@ export default function HomePage({ onStartRoam, isLoading, locationInfo, userCoo
       ))}
 
       {/* --- 顶部城市信息 --- */}
-      <div className="absolute top-10 flex items-center gap-2 text-white/40 text-sm md:text-base animate-fade-in">
-        <MapPin size={16} className="md:!w-5 md:!h-5" />
-        <span>{locationInfo || '正在获取位置...'}</span>
+      <div className="absolute top-4 md:top-6 left-0 right-0 flex items-center justify-center gap-2 text-white/40 text-xs md:text-sm animate-fade-in px-12">
+        <MapPin size={14} className="md:!w-4 md:!h-4 shrink-0" />
+        <span className="truncate max-w-[160px] md:max-w-[260px]">{locationInfo || '正在获取位置...'}</span>
+
+        {/* 天气信息 */}
+        {weather && (
+          <span
+            className={`shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] md:text-xs border backdrop-blur-sm
+              ${weather.score >= 4 ? 'text-emerald-400/70 border-emerald-400/20 bg-emerald-400/5'
+                : weather.score >= 2 ? 'text-amber-400/70 border-amber-400/20 bg-amber-400/5'
+                : 'text-rose-400/70 border-rose-400/20 bg-rose-400/5'
+              }`}
+            title={weather.tip}
+          >
+            <span className="leading-none">{weather.emoji}</span>
+            <span>{weather.temp}{weather.tempUnit}</span>
+          </span>
+        )}
+
         {locationDenied && (
           <button
             onClick={() => setPhase('citySearch')}
@@ -333,7 +352,53 @@ export default function HomePage({ onStartRoam, isLoading, locationInfo, userCoo
         <p className="text-white/15 text-[11px] md:text-xs tracking-wider">
           基于你的位置 · 随机生成 · 即刻出发
         </p>
+
+        {/* 继续上次路线 */}
+        {hasSavedRoute && onContinueRoute && (
+          <button
+            onClick={onContinueRoute}
+            className="flex items-center gap-2 text-white/25 hover:text-indigo-400/60 text-xs tracking-wider transition-colors duration-300"
+          >
+            <History size={13} />
+            <span>继续上次路线</span>
+          </button>
+        )}
       </div>
+
+      {/* --- 历史记录 --- */}
+      {routeHistory && routeHistory.length > 0 && onLoadFromHistory && (
+        <div className="absolute bottom-0 left-0 right-0 px-5 pb-3 max-h-[28vh] overflow-y-auto">
+          <div className="flex items-center gap-2 mb-2">
+            <History size={12} className="text-white/15" />
+            <span className="text-white/15 text-[10px] tracking-wider">历史路线</span>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {routeHistory.map((entry, i) => {
+              const date = new Date(entry.savedAt)
+              const dateStr = `${date.getMonth() + 1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`
+              return (
+                <button
+                  key={i}
+                  onClick={() => onLoadFromHistory(entry)}
+                  className="flex-shrink-0 w-[130px] p-2.5 rounded-xl glass-card hover:bg-white/[0.06] transition-all duration-300 text-left"
+                >
+                  <div className="flex items-center gap-1.5 text-white/35 text-[10px] mb-1.5">
+                    <MapPin size={10} />
+                    <span className="truncate">{entry.locationInfo || '未知地点'}</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-white/50 text-xs font-medium mb-1">
+                    <Footprints size={11} className="text-white/25" />
+                    <span>{entry.summary.totalStops}站</span>
+                    <span className="text-white/15">·</span>
+                    <span>{entry.summary.totalTime}分钟</span>
+                  </div>
+                  <div className="text-white/15 text-[9px]">{dateStr}</div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* --- 底部安全区 --- */}
       <div className="absolute bottom-8 text-white/10 text-[10px] md:text-xs">
@@ -341,4 +406,7 @@ export default function HomePage({ onStartRoam, isLoading, locationInfo, userCoo
       </div>
     </div>
   )
-}
+})
+HomePage.displayName = 'HomePage'
+
+export default HomePage

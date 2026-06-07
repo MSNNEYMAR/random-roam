@@ -2,13 +2,46 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
+
+    <!-- ==================== SEO ==================== -->
+    <meta name="description" content="不知道去哪的时候，让城市为你做一次选择。基于你的实时位置随机生成城市漫游路线——步行、骑行、地铁、打车，多种风格模式随心切换。" />
+    <meta name="keywords" content="城市漫游,随机路线,散步路线,City Walk,城市探索,周末去哪,随机旅行,路线推荐" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://random-roam.vercel.app" />
+
+    <!-- ==================== Open Graph (Facebook / 微信 / 微博) ==================== -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://random-roam.vercel.app" />
+    <meta property="og:title" content="漫无目的 RandomRoam — 让城市为你做一次选择" />
+    <meta property="og:description" content="不知道去哪的时候，打开 RandomRoam。基于你的实时位置，随机生成一条城市漫游路线。步行、骑行、地铁、打车，摸鱼模式、文艺出片、特种兵、情侣模式…随心切换。" />
+    <meta property="og:site_name" content="RandomRoam" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:image" content="https://random-roam.vercel.app/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="漫无目的 RandomRoam — 随机城市漫游路线生成器" />
+
+    <!-- ==================== Twitter Card ==================== -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://random-roam.vercel.app" />
+    <meta name="twitter:title" content="漫无目的 RandomRoam — 让城市为你做一次选择" />
+    <meta name="twitter:description" content="基于你的实时位置随机生成城市漫游路线。多种出行方式与风格模式随心切换。" />
+    <meta name="twitter:image" content="https://random-roam.vercel.app/og-image.png" />
+
+    <!-- ==================== PWA / 移动端 ==================== -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0a0a1a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="RandomRoam" />
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚶</text></svg>" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#1a1a2e" />
+
+    <!-- ==================== Fonts ==================== -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@400;600;700&display=swap" rel="stylesheet" />
-    <title>漫无目的 RandomRoam</title>
+
+    <title>漫无目的 RandomRoam — 随机城市漫游路线生成器</title>
   </head>
   <body class="overflow-hidden">
     <div id="root"></div>

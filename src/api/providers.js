@@ -11,8 +11,10 @@ export const CURRENT_PROVIDER = 'amap'
 
 export const PROVIDER_CONFIG = {
   amap: {
-    // 高德 Web服务 API Key → 去 https://console.amap.com/dev/ 申请
-    apiKey: '2eddcc5161801eaa3a51f1e09fa412a1',
+    // 高德 Web服务 API Key → 服务端注入，前端不再暴露
+    // 生产环境: 在 Vercel Dashboard 设置 AMAP_API_KEY 环境变量
+    // 本地开发: 在 .env.local 中设置 AMAP_API_KEY=你的Key
+    apiKey: '__SERVER_SIDE__',
     // 搜索半径 (米)
     radius: 10000,
     // POI 类型映射 (高德分类编码)

@@ -124,12 +124,12 @@ function isIrrelevantPOI(poi) {
  * @param {string} apiKey   高德 Web服务 API Key
  * @returns {Promise<Array<{name, lat, lng, address, description}>>}
  */
-export async function fetchFromAmap(lat, lng, keywords, radius, apiKey) {
+export async function fetchFromAmap(lat, lng, keywords, radius) {
   // place/around 周边搜索：location 圆心 + radius 半径天然限定范围，无需 citylimit
+  // API Key 由 Vercel Serverless Function 或 Vite dev proxy 在服务端注入
   const location = `${lng},${lat}`
 
   const params = new URLSearchParams({
-    key: apiKey,
     location,
     radius: String(radius),    // 严格 N 米内的结果
     keywords,
@@ -210,12 +210,11 @@ export async function fetchFromAmap(lat, lng, keywords, radius, apiKey) {
  *          distance — 步行距离 (米)
  *          duration — 步行时长 (秒)
  */
-export async function fetchWalkingRoute(originLat, originLng, destLat, destLng, apiKey) {
+export async function fetchWalkingRoute(originLat, originLng, destLat, destLng) {
   const origin = `${originLng},${originLat}`
   const destination = `${destLng},${destLat}`
 
   const params = new URLSearchParams({
-    key: apiKey,
     origin,
     destination,
   })
@@ -264,11 +263,10 @@ export async function fetchWalkingRoute(originLat, originLng, destLat, destLng, 
  * @param {string} apiKey 高德 Web服务 API Key
  * @returns {Promise<string>} 如 "广州市天河区体育西路"
  */
-export async function reverseGeocode(lat, lng, apiKey) {
+export async function reverseGeocode(lat, lng) {
   const location = `${lng},${lat}`
 
   const params = new URLSearchParams({
-    key: apiKey,
     location,
     radius: '1000',
     extensions: 'base',
@@ -351,9 +349,8 @@ function buildDescription(poi) {
  * @param {string} apiKey    高德 Web服务 API Key
  * @returns {Promise<{lat: number, lng: number, address: string} | null>}
  */
-export async function geocodeCity(cityName, apiKey) {
+export async function geocodeCity(cityName) {
   const params = new URLSearchParams({
-    key: apiKey,
     address: cityName,
     city: cityName,
   })

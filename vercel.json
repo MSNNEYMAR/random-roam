@@ -1,10 +1,6 @@
 {
   "rewrites": [
     {
-      "source": "/api/amap/:path*",
-      "destination": "https://restapi.amap.com/:path*"
-    },
-    {
       "source": "/api/google/:path*",
       "destination": "https://maps.googleapis.com/:path*"
     },

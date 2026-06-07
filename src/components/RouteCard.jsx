@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, memo, useCallback } from 'react'
 import {
   ArrowLeft,
   MapPin,
@@ -24,6 +24,7 @@ import {
   Wallet,
   MoveRight,
 } from 'lucide-react'
+import CityNavigation from './illustrations/CityNavigation'
 
 // ==================== 类别元数据 ====================
 const categoryMeta = {
@@ -74,7 +75,7 @@ const STYLE_META = {
 }
 
 // ==================== 单张地点卡片 ====================
-function StepCard({ idx, step, meta, isExpanded, isLast, photoUrl, hasPhoto, loadedPhotos, setLoadedPhotos, setExpandedIndex }) {
+const StepCard = memo(function StepCard({ idx, step, meta, isExpanded, isLast, photoUrl, hasPhoto, loadedPhotos, setLoadedPhotos, setExpandedIndex }) {
   const Icon = meta.icon
   const staggerClass = `stagger-${Math.min(idx + 1, 6)}`
 
@@ -234,10 +235,11 @@ function StepCard({ idx, step, meta, isExpanded, isLast, photoUrl, hasPhoto, loa
       )}
     </div>
   )
-}
+})
+StepCard.displayName = 'StepCard'
 
 // ==================== 路线展示主组件 ====================
-export default function RouteCard({ routeData, preferences, onBack, onRegenerate }) {
+const RouteCard = memo(function RouteCard({ routeData, preferences, onBack, onRegenerate, weather }) {
   const [expandedIndex, setExpandedIndex] = useState(null)
   const [isVisible, setIsVisible] = useState(false)
   const [loadedPhotos, setLoadedPhotos] = useState({})
@@ -248,31 +250,33 @@ export default function RouteCard({ routeData, preferences, onBack, onRegenerate
   const TransportIcon = transportMeta.icon
   const StyleIcon = styleMeta?.icon
 
-  // "大数字、小单位" — 提前计算
-  const distVal = summary.totalWalkingDist >= 1000
+  // "大数字、小单位" — useMemo 避免每次渲染重算
+  const distVal = useMemo(() => summary.totalWalkingDist >= 1000
     ? { value: (summary.totalWalkingDist / 1000).toFixed(1), unit: 'km' }
-    : { value: String(summary.totalWalkingDist), unit: 'm' }
-  const timeVal = summary.totalTime < 60
+    : { value: String(summary.totalWalkingDist), unit: 'm' },
+    [summary.totalWalkingDist])
+
+  const timeVal = useMemo(() => summary.totalTime < 60
     ? { value: String(summary.totalTime), unit: '分钟' }
-    : { value: String(Math.floor(summary.totalTime / 60)), unit: `${summary.totalTime % 60 > 0 ? 'h ' + (summary.totalTime % 60) + 'm' : '小时'}` }
+    : { value: String(Math.floor(summary.totalTime / 60)), unit: `${summary.totalTime % 60 > 0 ? 'h ' + (summary.totalTime % 60) + 'm' : '小时'}` },
+    [summary.totalTime])
 
   useEffect(() => {
-    // 微小延迟让 CSS 动画正常触发
     const t = requestAnimationFrame(() => setIsVisible(true))
     return () => cancelAnimationFrame(t)
   }, [])
 
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     setIsVisible(false)
     setTimeout(onBack, 350)
-  }
+  }, [onBack])
 
-  const formatTotalTime = (mins) => {
+  const formatTotalTime = useCallback((mins) => {
     if (mins < 60) return `${mins} 分钟`
     const h = Math.floor(mins / 60)
     const m = mins % 60
     return m > 0 ? `${h} 小时 ${m} 分钟` : `${h} 小时`
-  }
+  }, [])
 
   return (
     <div
@@ -347,7 +351,36 @@ export default function RouteCard({ routeData, preferences, onBack, onRegenerate
                 {styleMeta.label}
               </span>
             )}
+            {weather && (
+              <span
+                className={`flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-full border font-medium backdrop-blur-sm
+                  ${weather.score >= 4 ? 'text-emerald-400/80 border-emerald-400/20' : ''}
+                  ${weather.score >= 2 && weather.score < 4 ? 'text-amber-400/80 border-amber-400/20' : ''}
+                  ${weather.score < 2 ? 'text-rose-400/80 border-rose-400/20' : ''}
+                `}
+                style={{ background: 'rgba(255,255,255,0.03)' }}
+                title={weather.tip}
+              >
+                <span className="text-xs">{weather.emoji}</span>
+                {weather.label}
+                <span className="text-white/25">{weather.temp}{weather.tempUnit}</span>
+              </span>
+            )}
           </div>
+
+          {/* 天气提示 */}
+          {weather && (
+            <div
+              className={`mt-3 px-3 py-2 rounded-xl text-xs flex items-center gap-2 backdrop-blur-sm
+                ${weather.score >= 4 ? 'text-emerald-400/70 bg-emerald-400/[0.04] border border-emerald-400/[0.08]'
+                  : weather.score >= 2 ? 'text-amber-400/70 bg-amber-400/[0.04] border border-amber-400/[0.08]'
+                  : 'text-rose-400/70 bg-rose-400/[0.04] border border-rose-400/[0.08]'
+                }`}
+            >
+              <span>{weather.emoji}</span>
+              <span className="font-light">{weather.tip}</span>
+            </div>
+          )}
 
           {/* 三项统计 */}
           <div className="grid grid-cols-3 gap-3">
@@ -471,4 +504,7 @@ export default function RouteCard({ routeData, preferences, onBack, onRegenerate
       </div>
     </div>
   )
-}
+})
+RouteCard.displayName = 'RouteCard'
+
+export default RouteCard

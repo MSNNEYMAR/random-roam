@@ -51,15 +51,13 @@ function classifyGoogleType(googleTypes) {
 
 // ==================== 标准化 ====================
 
-let idCounter = 0
-
-function normalizeLandmark(raw, category) {
+function normalizeLandmark(raw, category, idx) {
   const defaults = CATEGORY_DEFAULTS[category] || CATEGORY_DEFAULTS.culture
   const tips = DEFAULT_TIPS[category] || DEFAULT_TIPS.culture
   const randomTip = tips[Math.floor(Math.random() * tips.length)]
 
   return {
-    id: `api_${++idCounter}`,
+    id: `api_${idx}`,
     name: raw.name,
     category,
     lat: raw.lat,
@@ -84,24 +82,20 @@ function normalizeLandmark(raw, category) {
  * @returns {Promise<Array>} 标准化后的地标列表
  */
 export async function fetchLandmarksByPosition(lat, lng, searchRadiusOverride = null) {
-  idCounter = 0
   let rawResults = []
 
   switch (CURRENT_PROVIDER) {
     case 'amap': {
       const config = PROVIDER_CONFIG.amap
-      if (!config.apiKey || config.apiKey === 'YOUR_AMAP_WEB_SERVICE_KEY') {
-        throw new Error('高德 API Key 未配置，请在 providers.js 中填入你的 Key')
-      }
 
       const searchRadius = searchRadiusOverride || config.radius || 10000
       console.log(`[RandomRoam] 高德周边搜索: radius=${searchRadius}m, location=${lng},${lat}`)
 
       const [cultureResults, cafeResults, parkResults, foodResults] = await Promise.all([
-        fetchFromAmap(lat, lng, config.typeMap.culture, searchRadius, config.apiKey),
-        fetchFromAmap(lat, lng, config.typeMap.cafe, searchRadius, config.apiKey),
-        fetchFromAmap(lat, lng, config.typeMap.park, searchRadius, config.apiKey),
-        fetchFromAmap(lat, lng, config.typeMap.food, searchRadius, config.apiKey),
+        fetchFromAmap(lat, lng, config.typeMap.culture, searchRadius),
+        fetchFromAmap(lat, lng, config.typeMap.cafe, searchRadius),
+        fetchFromAmap(lat, lng, config.typeMap.park, searchRadius),
+        fetchFromAmap(lat, lng, config.typeMap.food, searchRadius),
       ])
 
       rawResults = [
@@ -137,8 +131,8 @@ export async function fetchLandmarksByPosition(lat, lng, searchRadiusOverride = 
       throw new Error('未配置地图服务商，请在 providers.js 中设置 CURRENT_PROVIDER')
   }
 
-  // 标准化
-  let landmarks = rawResults.map(r => normalizeLandmark(r, r._category))
+  // 标准化（用 index 做 ID，消除模块级可变状态并发隐患）
+  let landmarks = rawResults.map((r, idx) => normalizeLandmark(r, r._category, idx))
 
   // localStorage 历史去重
   const historyIds = new Set(getHistoryPoiIds())

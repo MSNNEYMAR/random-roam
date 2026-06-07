@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import {
   Footprints,
   Bike,
@@ -113,7 +113,7 @@ function assignAngles(categories, containerWidth) {
 
 // ==================== 组件 ====================
 
-export default function PreferenceSelector({ onConfirm, onBack }) {
+const PreferenceSelector = memo(function PreferenceSelector({ onConfirm, onBack }) {
   const containerRef = useRef(null)
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 })
   const [selections, setSelections] = useState({ ...DEFAULT_SELECTIONS })
@@ -183,7 +183,7 @@ export default function PreferenceSelector({ onConfirm, onBack }) {
       className="relative h-full w-full select-none overflow-hidden"
     >
       {/* --- 顶部返回 --- */}
-      <div className="absolute top-6 left-5 md:left-8 z-30">
+      <div className="absolute top-8 md:top-10 left-5 md:left-8 z-30">
         <button
           onClick={onBack}
           className="flex items-center gap-1.5 text-white/30 hover:text-white/60 transition-colors"
@@ -194,7 +194,7 @@ export default function PreferenceSelector({ onConfirm, onBack }) {
       </div>
 
       {/* --- 类别标签指示 --- */}
-      <div className="absolute top-6 right-5 md:right-8 z-30 flex items-center gap-3 md:gap-4">
+      <div className="absolute top-8 md:top-10 right-5 md:right-8 z-30 flex items-center gap-2 md:gap-4">
         {CATEGORIES.map((cat) => (
           <div key={cat.key} className="flex items-center gap-1.5">
             <span
@@ -401,4 +401,7 @@ export default function PreferenceSelector({ onConfirm, onBack }) {
       </div>
     </div>
   )
-}
+})
+PreferenceSelector.displayName = 'PreferenceSelector'
+
+export default PreferenceSelector

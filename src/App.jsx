@@ -62,6 +62,7 @@ export default function App() {
   const lastPrefsRef = useRef(null)
   const lastCoordsRef = useRef(null)
   const lastLandmarksRef = useRef(null)
+  const diversityCtxRef = useRef(null)
 
   // ==================== 获取用户位置 ====================
   useEffect(() => {
@@ -198,7 +199,7 @@ export default function App() {
       const tConfig = TRANSPORT_CONFIG[transport] || TRANSPORT_CONFIG.walk
       const landmarks = await fetchLandmarksByPosition(coords.lat, coords.lng, tConfig.searchRadius)
       lastLandmarksRef.current = landmarks  // 保存以备后续换 POI 用
-      const result = generateRoute(coords.lat, coords.lng, landmarks, prefs, excludeIds)
+      const result = generateRoute(coords.lat, coords.lng, landmarks, prefs, excludeIds, diversityCtxRef.current)
 
       if (!result.success) {
         setPage('error')
@@ -218,6 +219,9 @@ export default function App() {
           day.summary = computeSummary(day.orderedRoute, prefs)
         }
       }
+
+      // 保存多样性上下文 — 下次换线/换POI时传入以产生差异化路线
+      if (result.diversityCtx) diversityCtxRef.current = result.diversityCtx
 
       recordUsedIds(result.orderedRoute)
 
@@ -276,12 +280,14 @@ export default function App() {
   const handleStartRoam = useCallback((prefs) => {
     if (!userCoords) return
     setPreferences(prefs)
+    diversityCtxRef.current = null  // 全新路线，清除多样性上下文
     doGenerateRoute(userCoords, prefs, getHistoryPoiIds())
   }, [userCoords, doGenerateRoute])
 
   const handleRegenerate = useCallback(() => {
     const coords = userCoords || lastCoordsRef.current
     if (!coords) return
+    // 保留 diversityCtxRef.current — 换线时传入以产生差异化路线
     doGenerateRoute(coords, preferences, getHistoryPoiIds())
   }, [userCoords, preferences, doGenerateRoute])
 
@@ -364,7 +370,7 @@ export default function App() {
       const sameCat = landmarks.filter(l => l.category === lm.category && !usedIds.has(l.id))
       if (sameCat.length === 0) return orderedRoute // 没有可换的
 
-      const replacement = weightedRandomPick(sameCat, 1.5)
+      const replacement = weightedRandomPick(sameCat, 1.5, diversityCtxRef.current)
       const newOrdered = [...orderedRoute]
       newOrdered[poiIndex] = replacement
       return orderByGreedy(newOrdered, lastCoordsRef.current?.lat || 0, lastCoordsRef.current?.lng || 0, speed)

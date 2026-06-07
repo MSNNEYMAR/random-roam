@@ -88,28 +88,95 @@ function isOpenNow(timeStr, currentMinutes) {
 // ==================== 无关设施过滤 ====================
 
 /**
- * 判断一个 POI 是否为无关设施（停车场、出入口、充电站等）
+ * 判断一个 POI 是否为无关设施或附属出入口（公交站、地铁口、大门等）
+ *
+ * 核心原则：如果这个"地点"只是到达另一个地点的方式、
+ * 或者只是大景点的其中一个门，那么它不应该独立出现在路线中。
+ * 它只应该在"如何到达"的导航步骤里出现。
+ *
+ * POI 分级过滤：
+ *  - 完全拦截：公交站、地铁口、停车场、厕所、ATM、售票处
+ *  - 降级标记：是某个大景点的出入口（如"颐和园新建宫门"）
+ *  - 保留：真正的独立景点/商铺/餐厅
  */
 function isIrrelevantPOI(poi) {
   const name = poi.name || ''
   const type = poi.type || ''
   const combined = `${name} ${type}`
 
+  // ── 完全拦截层 ──
   // 停车场
   if (/停车场|停车库|停车楼|P\+R|泊车/.test(combined)) return true
   // 充电站/加油站
   if (/充电站|充电桩|换电站|加油站|加气站/.test(combined)) return true
   // 厕所
   if (/公共厕所|卫生间|公厕/.test(name)) return true
-  // 纯出入口（"XX入口"、"XX出口"、"XX东/南/西/北门"）
-  if (/^.{1,6}(入口|出口|东门|南门|西门|北门|侧门|后门)$/.test(name)) return true
-  // 售票处
-  if (/售票处|售票厅|票务中心/.test(name)) return true
-  // 公交/地铁站（只匹配纯站名，不误杀景点名）
-  if (/^(公交|地铁|轨道交通|客运)/.test(name)) return true
-  if (/车站$/.test(name) && name.length <= 5) return true // "XX站"
+  // 售票处/游客中心
+  if (/售票处|售票厅|票务中心|游客中心|游客服务中心/.test(name)) return true
   // ATM/银行服务点
-  if (/^(ATM|银行|储蓄所)/.test(name)) return true
+  if (/^(ATM|银行|储蓄所|自助银行)/.test(name)) return true
+  // 公交/地铁站/客运站 — 纯交通类
+  if (/^(公交|地铁|轨道交通|客运|长途|轻轨|BRT|机场大巴)/.test(name)) return true
+  if (/地铁站$/.test(name) && !/体育|公园|广场|商场/.test(name)) return true
+  if (/公交站$/.test(name) && !/体育|公园|广场|商场/.test(name)) return true
+  if (/(?:公交|地铁|轨道).*(?:站|站台|枢纽|总站)/.test(name)) return true
+  // 短名+站后缀 ("XX站")
+  if (/^.{2,4}(站|总站)$/.test(name) && !/园|馆|湖|山|寺|庙/.test(name)) return true
+  // 纯交通设施 type
+  if (/交通设施/.test(type) && combined.length < 12) return true
+
+  // ── 出入口/大门降级层 ──
+  // 要识别出 "颐和园新建宫门" 不是一个独立景点
+  // 而是颐和园的一个入口，应该绑定到颐和园
+  // 高德会把这类 POI 作为独立条目返回，type 仍然是旅游景点
+  const isGate = isEntranceOrGateOnly(name, type)
+  if (isGate) return true
+
+  return false
+}
+
+/**
+ * 判断一个 POI 名称是否表示它只是一个出入口/门
+ * 而非独立景点
+ *
+ * 启发式规则：
+ *  1. 包含特定出入口后缀，且名称较短 → 大概率是门
+ *  2. 名称是"知名景点名 + 门" → 是那个景点的入口
+ *  3. 名称就是纯方向 + 门 → 某建筑/区域的门
+ *
+ * 例如：
+ *  - "颐和园新建宫门" → 颐和园的入口 ✅ 应拦截
+ *  - "颐和园" → 独立景点 ❌ 不拦截
+ *  - "人民公园-椰林少女" → 公园内的小景点 ⚠️ 要保留（高德的子景点）
+ *  - "XX小区东门" → 小区入口 ✅ 应拦截
+ */
+function isEntranceOrGateOnly(name, type) {
+  // 长名称 (>10字) 大概率不是纯门，比如 "人民公园-椰林少女"
+  if (name.length > 10) return false
+
+  // 知名景区名 + 方向门后缀
+  // 颐和园东宫门、圆明园南门、故宫午门、天坛西门…
+  if (/^(颐和园|圆明园|故宫|天坛|北海|景山|香山|八大处|中山公园|劳动人民文化宫|雍和宫|恭王府|国子监|大观园|植物园|动物园|奥林匹克|奥森|玉渊潭|紫竹院|陶然亭|龙潭|朝阳公园|世界公园|中华世纪坛|国家博物馆|首都博物馆|军事博物馆|自然博物馆|天文馆|科技馆|美术馆|大剧院|体育场|体育馆)/.test(name) &&
+      /[东西南北中]?(?:宫)?门|入口|出口$/.test(name)) {
+    return true
+  }
+
+  // 纯方向门或短名+门 — "东门"、"西门"、"北门"、"南门"、"东1门"
+  if (/^(东|南|西|北|正|后|侧|偏)门$/.test(name)) return true
+  if (/^[东西南北]\d号?门$/.test(name)) return true
+
+  // 带父体名的门 — 格式 "XXX东门"、"YYY南入口"、"ZZZ出入口"
+  // 限制名称长度防止误杀正规景点
+  if (name.length <= 8) {
+    if (/([东西南北中]|[东西南北]\d号?)(门|入口|出口|侧门|后门)$/.test(name)) return true
+    if (/出入口$/.test(name)) return true
+    // "XX入口" "XX出口" — 短名大概率是通道
+    if (/^(.*)(入口|出口)$/.test(name) && name.length <= 6) return true
+  }
+
+  // 含"门"且名称较短且 type 含 "旅游景点" → 大概率是景区门
+  // 例如："新建宫门(颐和园)" — 这就是个入口
+  if (/[宫国城园]门/.test(name) && name.length <= 6) return true
 
   return false
 }

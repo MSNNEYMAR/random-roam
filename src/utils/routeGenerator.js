@@ -103,6 +103,106 @@ const STYLE_STAY_MULTIPLIER = {
   relax: 1.3, artsy: 1.2, commando: 0.7, couple: 1.4, quiet: 1.1, budget: 0.9,
 }
 
+// ==================== POI 声望分级 (Tier) ====================
+
+/**
+ * POI 声望权重
+ * Tier 1 核心大牌: 颐和园、故宫 — 自带流量
+ * Tier 2 优质特色: 区域性知名景点、网红地
+ * Tier 3 社区冷门: 仅作路径填充，不优先推荐
+ */
+export const TIER_WEIGHT = { 1: 5.0, 2: 1.8, 3: 0.5 }
+
+export function classifyPoiTier(poi) {
+  const name = poi.name || ''
+  const type = poi.type || ''
+  const combined = `${name} ${type}`
+
+  // Tier 1: 国字号/世界级/5A/4A/省博
+  if (/^(国家|中国|中华|全国|首都)/.test(name)) return 1
+  if (/^(故宫|天坛|颐和园|圆明园|八达岭|明十三陵|雍和宫|恭王府|北海公园|景山公园|天安门|前门|王府井|南锣鼓巷|什刹海|奥林匹克|鸟巢|水立方|国家大剧院|玉渊潭|中山公园|香山|植物园|动物园)/.test(name)) return 1
+  if (/(?:博物馆|美术馆|科学中心|天文馆|自然博物馆|科技馆)$/.test(name) && name.length >= 6) return 1
+
+  // Tier 3: 社区/体育/微公园
+  if (/^(?:社区|街心|口袋|迷你|小微)/.test(name)) return 3
+  if (/(?:体育公园|运动公园|街边公园|小区|家属院|街坊)/.test(name)) return 3
+
+  // Tier 2: 区域知名→默认
+  if (/^(紫竹院|陶然亭|龙潭|朝阳公园|地坛|日坛|月坛|白塔寺|大观园|世界公园|中华世纪坛|798|三里屯|蓝色港湾|芳草地|太古里|国贸|SKP)/.test(name)) return 2
+  if (/(?:创意|艺术|文创|历史|文化|特色).{0,4}(?:园|区|街|小镇|街区)/.test(name)) return 2
+  if (/(?:书院|图书馆|教堂|清真寺|道观|寺庙|故居|纪念馆)/.test(name)) return 2
+  if (/(?:步行街|老街|古街|古镇|胡同|里弄)/.test(name)) return 2
+  if (/^(?:大董|全聚德|便宜坊|东来顺|海底捞|鼎泰丰|利苑|新荣记)/.test(name)) return 2
+
+  return 2  // 默认 Tier 2
+}
+
+// ==================== 主题标签 ====================
+
+/**
+ * POI 主题标签 — 用于多样性惩罚，确保换线换出不同风格
+ */
+export const THEME_TAGS = {
+  imperial_garden:   { label: '皇家园林',   re: /颐和园|圆明园|北海|景山|故宫|天坛|地坛|日坛|月坛|中山公园|香山|八大处|恭王府|雍和宫|避暑山庄|拙政园|留园|狮子林|皇家|御苑|行宫/ },
+  modern_sport:      { label: '现代运动',   re: /体育|运动|健身|球场|跑道|游泳|滑雪|攀岩|骑行|马拉松|户外|越野|滑板|轮滑|卡丁车/ },
+  nature_forest:     { label: '自然野趣',   re: /山|湖|河|海|湿地|森林|植物|动物|花|鸟|鱼|岛|滩|湾|峡|瀑布|温泉|草原|氧吧/ },
+  history_relic:     { label: '历史古迹',   re: /遗址|故居|纪念馆|陵|碑|城墙|古镇|古街|老街|古迹|石窟|石刻|壁画|长城|烽火|箭楼|城楼|钟楼|鼓楼|胡同|四合院/ },
+  art_lifestyle:     { label: '文艺街区',   re: /创意|艺术|画廊|书店|文创|手作|设计|美学|咖啡|茶|陶艺|插花|画室|买手店|生活方式|生活馆/ },
+  food_explore:      { label: '美食探店',   re: /餐厅|美食|火锅|烧烤|小吃|面馆|酒楼|饭店|食堂|大排档|老字号|本帮|粤菜|川菜|湘菜|日料|西餐|牛排|海鲜|甜品|烘焙|早茶|点心|私房/ },
+  modern_entertain:  { label: '都市娱乐',   re: /影城|电影|KTV|酒吧|夜店|LiveHouse|密室|剧本杀|桌游|电玩|VR|游乐场|主题乐园|摩天轮|水族馆|海洋馆/ },
+}
+
+export function classifyPoiTags(poi) {
+  const name = poi.name || ''
+  const type = poi.type || ''
+  const combined = `${name} ${type}`
+  const tags = []
+  for (const [key, def] of Object.entries(THEME_TAGS)) {
+    if (def.re.test(combined)) tags.push(key)
+  }
+  if (tags.length === 0) {
+    if (poi.category === 'culture') tags.push('history_relic')
+    else if (poi.category === 'park') tags.push('nature_forest')
+    else if (poi.category === 'cafe') tags.push('art_lifestyle')
+    else if (poi.category === 'food') tags.push('food_explore')
+  }
+  return tags
+}
+
+// ==================== 多样性上下文 ====================
+
+/**
+ * 计算候选 POI 的多样性惩罚系数 (0~1)
+ * @param {object} poi
+ * @param {{usedGeo:[], usedTagIds:[], usedPoiIds:[]}|null} ctx
+ * @returns {number} 1 = 无惩罚, 越接近 0 = 越被惩罚
+ */
+function diversityPenalty(poi, ctx) {
+  if (!ctx) return 1.0
+  const lm = getLM(poi)
+  let p = 1.0
+
+  // 空间排他
+  if (ctx.usedGeo?.length > 0) {
+    for (const geo of ctx.usedGeo) {
+      const d = haversineDistance(lm.lat, lm.lng, geo.lat, geo.lng)
+      if (d < 1.0) { p *= 0.15; break }
+      if (d < 2.0) { p *= 0.35; break }
+      if (d < 4.0) { p *= 0.65; break }
+    }
+  }
+
+  // 主题排他
+  if (ctx.usedTagIds?.length > 0) {
+    const poiTags = classifyPoiTags(lm)
+    const overlap = poiTags.filter(t => ctx.usedTagIds.includes(t))
+    if (overlap.length >= 2) p *= 0.25
+    else if (overlap.length >= 1) p *= 0.45
+  }
+
+  return p
+}
+
 // ==================== 工具函数 ====================
 
 function shuffle(arr) {
@@ -126,15 +226,24 @@ function getLM(item) {
  * @param {number} boost     权重放大系数 (1=不加权, 2=中等, 3=强)
  * @returns {*} 选中的元素
  */
-export function weightedRandomPick(pool, boost = 2.0) {
+export function weightedRandomPick(pool, boost = 2.0, diversityCtx = null) {
   if (pool.length === 1) return pool[0]
 
   const weights = pool.map((item) => {
     const lm = getLM(item)
+    // 评分权重
     const rating = (lm.rating != null && lm.rating > 0) ? Number(lm.rating) : 3.5
-    // 评分映射到权重: 3.0→0.6, 4.0→0.8, 5.0→1.0，乘以boost放大差距
-    const base = Math.max(0.3, rating / 5)
-    return Math.pow(base, 1.5) * boost + 0.3  // +0.3 保证低分也有机会
+    const ratingBase = Math.max(0.3, rating / 5)
+    const ratingW = Math.pow(ratingBase, 1.5) * boost + 0.3
+
+    // 声望层级权重
+    const tier = lm._tier || classifyPoiTier(lm)
+    const tierW = TIER_WEIGHT[tier] || 1.0
+
+    // 多样性惩罚 (仅当换线/换POI时生效)
+    const divPenalty = diversityPenalty(lm, diversityCtx)
+
+    return ratingW * tierW * divPenalty
   })
 
   const totalWeight = weights.reduce((s, w) => s + w, 0)
@@ -173,7 +282,7 @@ function pickFreshFirst(pool, excludeIds, count) {
 
 // ==================== 核心抽取 ====================
 
-export function pickOnePerCategory(filtered, excludeIds = []) {
+export function pickOnePerCategory(filtered, excludeIds = [], diversityCtx = null) {
   const groups = { culture: [], cafe: [], park: [] }
   const excludeSet = new Set(excludeIds)
   for (const item of filtered) {
@@ -189,14 +298,14 @@ export function pickOnePerCategory(filtered, excludeIds = []) {
     if (list.length === 0) continue
     const fresh = list.filter((item) => !excludeSet.has(getLM(item).id))
     const pool = fresh.length > 0 ? fresh : list
-    result[key] = weightedRandomPick(pool, 2.0)
+    result[key] = weightedRandomPick(pool, 2.0, diversityCtx)
   }
 
   const picked = Object.values(result)
   return picked.length >= 2 ? result : null
 }
 
-function pickByStyle(filtered, targetCategories, targetCount, style, excludeIds = [], timeBudget = '2h') {
+function pickByStyle(filtered, targetCategories, targetCount, style, excludeIds = [], timeBudget = '2h', diversityCtx = null) {
   const groups = {}
   for (const item of filtered) {
     const cat = getLM(item).category
@@ -246,7 +355,7 @@ function pickByStyle(filtered, targetCategories, targetCount, style, excludeIds 
     if (cat === 'cafe' && cafeMax === 0) continue
     const pool = freshPools[cat].filter((item) => !usedInThisRoute.has(getLM(item).id))
     if (pool.length > 0) {
-      const chosen = weightedRandomPick(pool, 2.5)
+      const chosen = weightedRandomPick(pool, 2.5, diversityCtx)
       picked.push(chosen); usedInThisRoute.add(getLM(chosen).id)
       catCounts[cat]++; lastCat = cat
     }
@@ -273,7 +382,7 @@ function pickByStyle(filtered, targetCategories, targetCount, style, excludeIds 
     const chosenCat = weighted[Math.floor(Math.random() * weighted.length)]
     const pool = freshPools[chosenCat].filter((item) => !usedInThisRoute.has(getLM(item).id))
     if (pool.length > 0) {
-      const chosen = weightedRandomPick(pool, 2.5)
+      const chosen = weightedRandomPick(pool, 2.5, diversityCtx)
       picked.push(chosen); usedInThisRoute.add(getLM(chosen).id)
       catCounts[chosenCat]++; lastCat = chosenCat
     }
@@ -411,9 +520,10 @@ function routeWithinLimit(orderedRoute, tConfig) {
  * @param {Array}   landmarks   高德 API 返回的全部 POI
  * @param {object}  preferences {transport, time, style}
  * @param {Array}   excludeIds  历史去重 ID 列表
- * @returns {{ success, orderedRoute?, summary?, days?, error? }}
+ * @param {object|null}  diversityCtx 多样性上下文 (换线时传入)
+ * @returns {{ success, orderedRoute?, summary?, days?, diversityCtx?, error? }}
  */
-export function generateRoute(userLat, userLng, landmarks, preferences = null, excludeIds = []) {
+export function generateRoute(userLat, userLng, landmarks, preferences = null, excludeIds = [], diversityCtx = null) {
   const transport = preferences?.transport || 'walk'
   const tConfig = TRANSPORT_CONFIG[transport] || TRANSPORT_CONFIG.walk
   let targetCount = 3, targetCategories = ['culture', 'cafe', 'park'], style = null, timeBudget = '2h'
@@ -443,21 +553,30 @@ export function generateRoute(userLat, userLng, landmarks, preferences = null, e
     return { success: false, error: `附近 ${tConfig.filterMaxKm}km 内找不到足够地标，换个位置试试吧~` }
   }
 
+  // 预计算 Tier 评分 — 避免每次调用 weightedRandomPick 都重新算
+  for (const item of filtered) {
+    const lm = getLM(item)
+    if (lm._tier == null) lm._tier = classifyPoiTier(lm)
+  }
+
+  // 按 Tier 分层排序，靠前的是大牌
+  filtered.sort((a, b) => (getLM(a)._tier || 2) - (getLM(b)._tier || 2))
+
   // Step 2: 多天路线 → 分天处理
   const isMultiDay = timeBudget === '1d' || timeBudget === '2d'
   if (isMultiDay) {
-    return buildMultiDayRoute(filtered, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, userLat, userLng, tConfig)
+    return buildMultiDayRoute(filtered, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, userLat, userLng, tConfig, diversityCtx)
   }
 
   // Step 3: 单天路线 (含里程校验重试)
-  return buildSingleRoute(filtered, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, userLat, userLng, tConfig)
+  return buildSingleRoute(filtered, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, userLat, userLng, tConfig, diversityCtx)
 }
 
 // ==================== 单天路线 (含里程校验重试) ====================
 
 const MAX_RETRIES = 30
 
-function buildSingleRoute(filtered, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, userLat, userLng, tConfig) {
+function buildSingleRoute(filtered, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, userLat, userLng, tConfig, diversityCtx = null) {
   const speed = tConfig.speed
   const maxDailyMeters = tConfig.maxDailyDistance
 
@@ -465,18 +584,18 @@ function buildSingleRoute(filtered, targetCategories, targetCount, style, prefer
     let picked
 
     if (preferences) {
-      picked = pickByStyle(filtered, targetCategories, targetCount, style, excludeIds, timeBudget)
+      picked = pickByStyle(filtered, targetCategories, targetCount, style, excludeIds, timeBudget, diversityCtx)
     } else {
-      const pm = pickOnePerCategory(filtered, excludeIds)
+      const pm = pickOnePerCategory(filtered, excludeIds, diversityCtx)
       if (pm) { picked = Object.values(pm) }
       else {
         const fb = ['culture', 'cafe', 'park']; shuffle(fb)
-        picked = pickByStyle(filtered, fb, 2, null, excludeIds, timeBudget)
+        picked = pickByStyle(filtered, fb, 2, null, excludeIds, timeBudget, diversityCtx)
       }
     }
 
     if (!picked || picked.length < 2) {
-      picked = pickByStyle(filtered, targetCategories, Math.max(targetCount, 2), style, [], timeBudget)
+      picked = pickByStyle(filtered, targetCategories, Math.max(targetCount, 2), style, [], timeBudget, diversityCtx)
       if (!picked || picked.length < 2) {
         return { success: false, error: '找不到足够多的不同地点，请换个区域试试' }
       }
@@ -486,11 +605,13 @@ function buildSingleRoute(filtered, targetCategories, targetCount, style, prefer
 
     // 里程校验
     if (routeWithinLimit(ordered, tConfig)) {
+      const routePOIs = ordered.map((s) => getLM(s))
       return {
         success: true,
-        route: ordered.map((s) => getLM(s)),
+        route: routePOIs,
         orderedRoute: ordered,
         summary: computeSummary(ordered, preferences),
+        diversityCtx: buildDiversityCtx(routePOIs),
       }
     }
 
@@ -499,6 +620,28 @@ function buildSingleRoute(filtered, targetCategories, targetCount, style, prefer
   }
 
   return { success: false, error: `无法在${tConfig.label} ${(maxDailyMeters / 1000).toFixed(1)}km 限制内生成路线，请扩容出行方式或换个区域` }
+}
+
+/**
+ * 从已生成路线的 POI 列表构建多样性上下文
+ * 用于下一次"换一条"时传入，确保新路线差异化
+ */
+function buildDiversityCtx(poiList) {
+  const usedGeo = poiList.map((p) => ({ lat: p.lat, lng: p.lng }))
+  const usedPoiIds = poiList.map((p) => p.id).filter(Boolean)
+  const tagCounts = {}
+  for (const p of poiList) {
+    for (const t of classifyPoiTags(p)) {
+      tagCounts[t] = (tagCounts[t] || 0) + 1
+    }
+  }
+  // 取出现最多的前3个标签作为"主导风格"
+  const usedTagIds = Object.entries(tagCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([t]) => t)
+
+  return { usedGeo, usedPoiIds, usedTagIds }
 }
 
 /** 多天路线：一次性抽取全部地点 → 空间聚类分组 → 每天独立最近邻排序 + 独立里程校验 */
@@ -557,7 +700,7 @@ function clusterByProximity(picked, userLat, userLng, daySizes) {
   return [group1, group2]
 }
 
-function buildMultiDayRoute(filtered, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, userLat, userLng, tConfig) {
+function buildMultiDayRoute(filtered, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, userLat, userLng, tConfig, diversityCtx = null) {
   const split = DAY_SPLITS[timeBudget] || [4, 4]
   const dayLabels = ['Day 1', 'Day 2']
   const speed = tConfig.speed
@@ -566,14 +709,14 @@ function buildMultiDayRoute(filtered, targetCategories, targetCount, style, pref
     // 一次性抽取全部 targetCount 个地点
     let picked
     if (preferences) {
-      picked = pickByStyle(filtered, targetCategories, targetCount, style, excludeIds, timeBudget)
+      picked = pickByStyle(filtered, targetCategories, targetCount, style, excludeIds, timeBudget, diversityCtx)
     } else {
       const fb = ['culture', 'cafe', 'park']; shuffle(fb)
-      picked = pickByStyle(filtered, fb, targetCount, null, excludeIds, timeBudget)
+      picked = pickByStyle(filtered, fb, targetCount, null, excludeIds, timeBudget, diversityCtx)
     }
 
     if (!picked || picked.length < split[0] + 1) {
-      picked = pickByStyle(filtered, targetCategories, targetCount, style, [], timeBudget)
+      picked = pickByStyle(filtered, targetCategories, targetCount, style, [], timeBudget, diversityCtx)
       if (!picked || picked.length < split[0] + 1) {
         return { success: false, error: '附近地标不够组成多天路线，试试单天方案' }
       }
@@ -605,6 +748,7 @@ function buildMultiDayRoute(filtered, targetCategories, targetCount, style, pref
       route: allOrdered.map((s) => getLM(s)),
       orderedRoute: allOrdered,
       summary: totalSummary,
+      diversityCtx: buildDiversityCtx(allOrdered.map((s) => getLM(s))),
       days: [
         { label: dayLabels[0], orderedRoute: day1Ordered, summary: day1Summary },
         { label: dayLabels[1], orderedRoute: day2Ordered, summary: day2Summary },

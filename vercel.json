@@ -1,19 +1,4 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "builds": [
-    {
-      "src": "api/**/*.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "package.json",
-      "use": "@vercel/static",
-      "config": {
-        "distDir": "dist"
-      }
-    }
-  ],
   "rewrites": [
     {
       "source": "/api/google/:path*",

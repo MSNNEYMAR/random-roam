@@ -1,23 +1,17 @@
 {
-  "builds": [
-    {
-      "src": "api/amap/*.js",
-      "use": "@vercel/node"
+  "functions": {
+    "api/amap.js": {
+      "maxDuration": 10
     },
-    {
-      "src": "api/health.js",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "buildCommand": "npm run build",
-        "distDir": "dist"
-      }
+    "api/health.js": {
+      "maxDuration": 10
     }
-  ],
+  },
   "rewrites": [
+    {
+      "source": "/api/amap/:path+",
+      "destination": "/api/amap?path=$path"
+    },
     {
       "source": "/api/google/:path*",
       "destination": "https://maps.googleapis.com/:path*"

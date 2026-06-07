@@ -9,8 +9,8 @@
   },
   "rewrites": [
     {
-      "source": "/api/amap/:path+",
-      "destination": "/api/amap?path=$path"
+      "source": "/api/amap/:path*",
+      "destination": "/api/amap"
     },
     {
       "source": "/api/google/:path*",

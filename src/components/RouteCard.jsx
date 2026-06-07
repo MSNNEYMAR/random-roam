@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, memo, useCallback } from 'react'
 import {
   ArrowLeft,
+  ArrowUp,
+  ArrowDown,
   MapPin,
   Clock,
   Route,
@@ -12,6 +14,7 @@ import {
   ChevronRight,
   Sparkles,
   RefreshCw,
+  Shuffle,
   Info,
   Image,
   Car,
@@ -75,7 +78,7 @@ const STYLE_META = {
 }
 
 // ==================== 单张地点卡片 ====================
-const StepCard = memo(function StepCard({ idx, step, meta, isExpanded, isLast, photoUrl, hasPhoto, loadedPhotos, setLoadedPhotos, setExpandedIndex }) {
+const StepCard = memo(function StepCard({ idx, step, meta, isExpanded, isLast, photoUrl, hasPhoto, loadedPhotos, setLoadedPhotos, setExpandedIndex, onSwapPoi, onMovePoi, dayIndex }) {
   const Icon = meta.icon
   const staggerClass = `stagger-${Math.min(idx + 1, 6)}`
 
@@ -205,6 +208,51 @@ const StepCard = memo(function StepCard({ idx, step, meta, isExpanded, isLast, p
               <Info size={13} className="text-amber-400/40 mt-0.5 shrink-0" />
               <p className="text-slate-500 text-xs leading-relaxed font-normal">{step.tip}</p>
             </div>
+
+            {/* 操作按钮 — 换一个 / 上移 / 下移 */}
+            {(onSwapPoi || onMovePoi) && (
+              <div className="flex items-center gap-2 mt-3">
+                {onSwapPoi && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onSwapPoi(idx, dayIndex) }}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg
+                               bg-white/[0.03] border border-white/[0.06]
+                               text-white/25 hover:text-indigo-400/70 hover:border-indigo-400/20
+                               text-[11px] transition-all duration-200"
+                    title="换一个同类地点"
+                  >
+                    <Shuffle size={11} />
+                    <span>换一个</span>
+                  </button>
+                )}
+                {onMovePoi && (
+                  <>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onMovePoi(idx, 'up', dayIndex) }}
+                      disabled={idx === 0}
+                      className="flex items-center gap-0.5 px-2 py-1.5 rounded-lg
+                                 bg-white/[0.03] border border-white/[0.06]
+                                 text-white/25 hover:text-amber-400/70 hover:border-amber-400/20
+                                 text-[11px] transition-all duration-200
+                                 disabled:opacity-20 disabled:cursor-not-allowed"
+                      title="上移"
+                    >
+                      <ArrowUp size={11} />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onMovePoi(idx, 'down', dayIndex) }}
+                      className="flex items-center gap-0.5 px-2 py-1.5 rounded-lg
+                                 bg-white/[0.03] border border-white/[0.06]
+                                 text-white/25 hover:text-amber-400/70 hover:border-amber-400/20
+                                 text-[11px] transition-all duration-200"
+                      title="下移"
+                    >
+                      <ArrowDown size={11} />
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
             {step.photos && step.photos.length > 1 && (
               <div className="flex gap-2 mt-3 overflow-x-auto pb-1">
                 {step.photos.map((url, i) => (
@@ -239,7 +287,7 @@ const StepCard = memo(function StepCard({ idx, step, meta, isExpanded, isLast, p
 StepCard.displayName = 'StepCard'
 
 // ==================== 路线展示主组件 ====================
-const RouteCard = memo(function RouteCard({ routeData, preferences, onBack, onRegenerate, weather }) {
+const RouteCard = memo(function RouteCard({ routeData, preferences, onBack, onRegenerate, weather, onSwapPoi, onMovePoi }) {
   const [expandedIndex, setExpandedIndex] = useState(null)
   const [isVisible, setIsVisible] = useState(false)
   const [loadedPhotos, setLoadedPhotos] = useState({})
@@ -455,6 +503,9 @@ const RouteCard = memo(function RouteCard({ routeData, preferences, onBack, onRe
                         loadedPhotos={loadedPhotos}
                         setLoadedPhotos={setLoadedPhotos}
                         setExpandedIndex={() => setExpandedIndex(isExpanded ? null : `${di}-${idx}`)}
+                        onSwapPoi={onSwapPoi}
+                        onMovePoi={onMovePoi}
+                        dayIndex={di}
                       />
                     </div>
                   )
@@ -487,6 +538,8 @@ const RouteCard = memo(function RouteCard({ routeData, preferences, onBack, onRe
                   loadedPhotos={loadedPhotos}
                   setLoadedPhotos={setLoadedPhotos}
                   setExpandedIndex={() => setExpandedIndex(isExpanded ? null : idx)}
+                  onSwapPoi={onSwapPoi}
+                  onMovePoi={onMovePoi}
                 />
               )
             })}

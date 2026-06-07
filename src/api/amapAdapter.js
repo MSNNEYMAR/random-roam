@@ -254,6 +254,117 @@ export async function fetchWalkingRoute(originLat, originLng, destLat, destLng) 
 }
 
 /**
+ * 驾车路径规划 — 获取两点之间的真实驾车距离和时间
+ *
+ * 文档: https://lbs.amap.com/api/webservice/guide/api/direction
+ * 接口: v3/direction/driving
+ *
+ * @returns {Promise<{distance: number, duration: number} | null>}
+ *          distance — 驾车距离 (米)
+ *          duration — 驾车时长 (秒)
+ */
+export async function fetchDrivingRoute(originLat, originLng, destLat, destLng) {
+  const origin = `${originLng},${originLat}`
+  const destination = `${destLng},${destLat}`
+
+  const params = new URLSearchParams({ origin, destination, strategy: '2' })
+  const url = `${AMAP_BASE}/v3/direction/driving?${params.toString()}`
+
+  try {
+    const response = await fetch(url)
+    if (!response.ok) return null
+    const data = await response.json()
+    if (data.status !== '1' || !data.route?.paths?.length) {
+      console.warn('[Amap] 驾车路径规划失败:', data.info)
+      return null
+    }
+    const path = data.route.paths[0]
+    return { distance: Number(path.distance) || 0, duration: Number(path.duration) || 0 }
+  } catch (err) {
+    console.warn('[Amap] 驾车路径请求异常:', err.message)
+    return null
+  }
+}
+
+/**
+ * 公交/地铁路径规划 — 获取两点之间的公共交通距离和时间
+ *
+ * 接口: v3/direction/transit/integrated
+ *
+ * @returns {Promise<{distance: number, duration: number, fare: number|null} | null>}
+ *          distance — 总距离 (米，含步行到站+乘车+出站步行)
+ *          duration — 总时长 (秒)
+ *          fare     — 票价 (元)，不可用时为 null
+ */
+export async function fetchTransitRoute(originLat, originLng, destLat, destLng) {
+  const origin = `${originLng},${originLat}`
+  const destination = `${destLng},${destLat}`
+
+  const params = new URLSearchParams({
+    origin,
+    destination,
+    city1: '',  // 让高德自动识别城市
+    city2: '',
+    strategy: '0',  // 最快捷模式
+  })
+  const url = `${AMAP_BASE}/v3/direction/transit/integrated?${params.toString()}`
+
+  try {
+    const response = await fetch(url)
+    if (!response.ok) return null
+    const data = await response.json()
+    if (data.status !== '1' || !data.route?.transits?.length) {
+      console.warn('[Amap] 公交路径规划失败:', data.info)
+      return null
+    }
+    // 取第一条换乘方案
+    const transit = data.route.transits[0]
+    return {
+      distance: Number(transit.distance) || 0,
+      duration: Number(transit.duration) || 0,
+      fare: transit.cost != null ? Number(transit.cost) : null,
+    }
+  } catch (err) {
+    console.warn('[Amap] 公交路径请求异常:', err.message)
+    return null
+  }
+}
+
+/**
+ * 骑行路径规划 — 获取两点之间的真实骑行距离和时间
+ *
+ * 接口: v4/direction/bicycling
+ *
+ * @returns {Promise<{distance: number, duration: number} | null>}
+ *          distance — 骑行距离 (米)
+ *          duration — 骑行时长 (秒)
+ */
+export async function fetchCyclingRoute(originLat, originLng, destLat, destLng) {
+  const origin = `${originLng},${originLat}`
+  const destination = `${destLng},${destLat}`
+
+  const params = new URLSearchParams({ origin, destination })
+  const url = `${AMAP_BASE}/v4/direction/bicycling?${params.toString()}`
+
+  try {
+    const response = await fetch(url)
+    if (!response.ok) return null
+    const data = await response.json()
+    // 高德 v4 骑行 API 响应结构: { errcode: 0, data: { paths: [...] } }
+    const paths = data.data?.paths || data.route?.paths || []
+    if ((data.errcode !== 0 && data.status !== '1') || !paths.length) {
+      console.warn('[Amap] 骑行路径规划失败:', data.errcode || data.info)
+      return null
+    }
+    const path = paths[0]
+    return { distance: Number(path.distance) || 0, duration: Number(path.duration) || 0 }
+  } catch (err) {
+    console.warn('[Amap] 骑行路径请求异常:', err.message)
+    return null
+  }
+}
+
+/**
  * 逆地理编码 — 坐标 → 人类可读地址
  *
  * 文档: https://lbs.amap.com/api/webservice/guide/api/georegeo

@@ -116,6 +116,37 @@ function getLM(item) {
   return item.landmark || item
 }
 
+// ==================== 评分加权随机 ====================
+
+/**
+ * 从池中按评分加权随机抽取一个元素
+ * 评分越高被选中概率越大，但保留随机性（不会每次都选同一个）
+ *
+ * @param {Array}  pool      候选列表
+ * @param {number} boost     权重放大系数 (1=不加权, 2=中等, 3=强)
+ * @returns {*} 选中的元素
+ */
+export function weightedRandomPick(pool, boost = 2.0) {
+  if (pool.length === 1) return pool[0]
+
+  const weights = pool.map((item) => {
+    const lm = getLM(item)
+    const rating = (lm.rating != null && lm.rating > 0) ? Number(lm.rating) : 3.5
+    // 评分映射到权重: 3.0→0.6, 4.0→0.8, 5.0→1.0，乘以boost放大差距
+    const base = Math.max(0.3, rating / 5)
+    return Math.pow(base, 1.5) * boost + 0.3  // +0.3 保证低分也有机会
+  })
+
+  const totalWeight = weights.reduce((s, w) => s + w, 0)
+  let random = Math.random() * totalWeight
+
+  for (let i = 0; i < pool.length; i++) {
+    random -= weights[i]
+    if (random <= 0) return pool[i]
+  }
+  return pool[pool.length - 1]
+}
+
 // ==================== 半径筛选 ====================
 
 export function filterByRadius(userLat, userLng, landmarks, minKm = 0.2, maxKm = 5.0) {
@@ -158,8 +189,7 @@ export function pickOnePerCategory(filtered, excludeIds = []) {
     if (list.length === 0) continue
     const fresh = list.filter((item) => !excludeSet.has(getLM(item).id))
     const pool = fresh.length > 0 ? fresh : list
-    const sp = [...pool]; shuffle(sp)
-    result[key] = sp[0]
+    result[key] = weightedRandomPick(pool, 2.0)
   }
 
   const picked = Object.values(result)
@@ -216,8 +246,8 @@ function pickByStyle(filtered, targetCategories, targetCount, style, excludeIds 
     if (cat === 'cafe' && cafeMax === 0) continue
     const pool = freshPools[cat].filter((item) => !usedInThisRoute.has(getLM(item).id))
     if (pool.length > 0) {
-      const idx = Math.floor(Math.random() * pool.length)
-      picked.push(pool[idx]); usedInThisRoute.add(getLM(pool[idx]).id)
+      const chosen = weightedRandomPick(pool, 2.5)
+      picked.push(chosen); usedInThisRoute.add(getLM(chosen).id)
       catCounts[cat]++; lastCat = cat
     }
   }
@@ -243,8 +273,8 @@ function pickByStyle(filtered, targetCategories, targetCount, style, excludeIds 
     const chosenCat = weighted[Math.floor(Math.random() * weighted.length)]
     const pool = freshPools[chosenCat].filter((item) => !usedInThisRoute.has(getLM(item).id))
     if (pool.length > 0) {
-      const idx = Math.floor(Math.random() * pool.length)
-      picked.push(pool[idx]); usedInThisRoute.add(getLM(pool[idx]).id)
+      const chosen = weightedRandomPick(pool, 2.5)
+      picked.push(chosen); usedInThisRoute.add(getLM(chosen).id)
       catCounts[chosenCat]++; lastCat = chosenCat
     }
   }
@@ -471,7 +501,62 @@ function buildSingleRoute(filtered, targetCategories, targetCount, style, prefer
   return { success: false, error: `无法在${tConfig.label} ${(maxDailyMeters / 1000).toFixed(1)}km 限制内生成路线，请扩容出行方式或换个区域` }
 }
 
-/** 多天路线：一次性抽取全部地点 → 按天分组 → 每天独立最近邻排序 + 独立里程校验 */
+/** 多天路线：一次性抽取全部地点 → 空间聚类分组 → 每天独立最近邻排序 + 独立里程校验 */
+
+/**
+ * 按 POI 之间的地理邻近度做贪婪聚类，把相邻的地点分到同一天
+ * 避免"Day1城西、Day2城东"这种跨城奔波
+ *
+ * @param {Array}  picked    被选中的地点列表
+ * @param {number} userLat / userLng
+ * @param {Array}  daySizes  每天的目标地点数，如 [4, 4]
+ * @returns {[Array, Array]} [day1Pool, day2Pool]
+ */
+function clusterByProximity(picked, userLat, userLng, daySizes) {
+  const n = picked.length
+  if (n <= daySizes[0]) return [[...picked], []]
+
+  // 种子1: 离用户最近的 POI
+  let seed1 = 0, minD = Infinity
+  for (let i = 0; i < n; i++) {
+    const d = haversineDistance(userLat, userLng, getLM(picked[i]).lat, getLM(picked[i]).lng)
+    if (d < minD) { minD = d; seed1 = i }
+  }
+
+  // 种子2: 离种子1最远的 POI（确保两组覆盖不同区域）
+  let seed2 = 0, maxD = -1
+  const s1lm = getLM(picked[seed1])
+  for (let i = 0; i < n; i++) {
+    if (i === seed1) continue
+    const d = haversineDistance(s1lm.lat, s1lm.lng, getLM(picked[i]).lat, getLM(picked[i]).lng)
+    if (d > maxD) { maxD = d; seed2 = i }
+  }
+
+  // 分配：每个剩余 POI 归到最近的种子组（同时保量平衡）
+  const group1 = [picked[seed1]], group2 = [picked[seed2]]
+  const used = new Set([seed1, seed2])
+  const s2lm = getLM(picked[seed2])
+
+  for (let i = 0; i < n; i++) {
+    if (used.has(i)) continue
+    const pi = getLM(picked[i])
+    const d1 = haversineDistance(s1lm.lat, s1lm.lng, pi.lat, pi.lng)
+    const d2 = haversineDistance(s2lm.lat, s2lm.lng, pi.lat, pi.lng)
+
+    if (group1.length >= daySizes[0]) {
+      group2.push(picked[i])
+    } else if (group2.length >= daySizes[1]) {
+      group1.push(picked[i])
+    } else if (d1 <= d2) {
+      group1.push(picked[i])
+    } else {
+      group2.push(picked[i])
+    }
+  }
+
+  return [group1, group2]
+}
+
 function buildMultiDayRoute(filtered, targetCategories, targetCount, style, preferences, excludeIds, timeBudget, userLat, userLng, tConfig) {
   const split = DAY_SPLITS[timeBudget] || [4, 4]
   const dayLabels = ['Day 1', 'Day 2']
@@ -494,15 +579,8 @@ function buildMultiDayRoute(filtered, targetCategories, targetCount, style, pref
       }
     }
 
-    // 按用户距离分组：最近的一半归 Day1，较远的一半归 Day2
-    const withDist = picked.map((p) => ({
-      ...p,
-      _udist: haversineDistance(userLat, userLng, getLM(p).lat, getLM(p).lng),
-    }))
-    withDist.sort((a, b) => a._udist - b._udist)
-
-    const day1Pool = withDist.slice(0, split[0])
-    const day2Pool = withDist.slice(split[0], split[0] + split[1])
+    // 按空间邻近度聚类 — 相邻地点归同一天，避免跨城奔波
+    const [day1Pool, day2Pool] = clusterByProximity(picked, userLat, userLng, split)
 
     // 每天独立最近邻排序
     const day1Ordered = orderByGreedy(day1Pool, userLat, userLng, speed)

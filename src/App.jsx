@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react'
 import HomePage from './components/HomePage'
-import { generateRoute, computeSummary, TRANSPORT_CONFIG } from './utils/routeGenerator'
+import { generateRoute, computeSummary, TRANSPORT_CONFIG, weightedRandomPick, orderByGreedy } from './utils/routeGenerator'
 import { fetchLandmarksByPosition, addToHistory, getHistoryPoiIds } from './api/placesApi'
-import { reverseGeocode, fetchWalkingRoute, geocodeCity } from './api/amapAdapter'
+import { reverseGeocode, fetchWalkingRoute, fetchDrivingRoute, fetchTransitRoute, fetchCyclingRoute, geocodeCity } from './api/amapAdapter'
 import { saveRoute, loadSavedRoute, addToRouteHistory, loadRouteHistory } from './utils/storage'
 import { fetchCurrentWeather } from './api/weatherApi'
 import LocationSearch from './components/illustrations/LocationSearch'
@@ -58,9 +58,10 @@ export default function App() {
   const [weather, setWeather] = useState(null)
   const [hasSavedRoute, setHasSavedRoute] = useState(false)
   const [routeHistory, setRouteHistory] = useState([])
-  // 保存最后一次使用的 prefs 用于重试
+  // 保存最后一次使用的 prefs / 坐标 / landmarks 用于重试 & 换 POI
   const lastPrefsRef = useRef(null)
   const lastCoordsRef = useRef(null)
+  const lastLandmarksRef = useRef(null)
 
   // ==================== 获取用户位置 ====================
   useEffect(() => {
@@ -130,27 +131,55 @@ export default function App() {
     }
   }, [])
 
-  // ==================== 步行 API 丰富 ====================
-  const enrichWithWalking = async (orderedRoute, userLat, userLng) => {
+  // ==================== 真实路径规划 API 丰富 ====================
+  // 不同出行方式调用高德不同方向 API，获取真实距离和时间
+  // walk → v3/direction/walking  (含路径步骤)
+  // drive → v3/direction/driving
+  // cycle → v4/direction/bicycling
+  // subway → v3/direction/transit/integrated (含票价)
+
+  const FETCHER_MAP = {
+    walk:   fetchWalkingRoute,
+    drive:  fetchDrivingRoute,
+    cycle:  fetchCyclingRoute,
+    subway: fetchTransitRoute,
+  }
+
+  const enrichWithDirections = useCallback(async (orderedRoute, userLat, userLng, transport = 'walk') => {
+    const fetcher = FETCHER_MAP[transport] || fetchWalkingRoute
     const legs = []
     if (orderedRoute.length > 0) legs.push({ fromLat: userLat, fromLng: userLng, toIdx: 0 })
     for (let i = 1; i < orderedRoute.length; i++) legs.push({ fromIdx: i - 1, toIdx: i })
 
     const results = await Promise.all(legs.map(async (leg) => {
-      const fromLat = leg.fromLat ?? (orderedRoute[leg.fromIdx].landmark || orderedRoute[leg.fromIdx]).lat
-      const fromLng = leg.fromLng ?? (orderedRoute[leg.fromIdx].landmark || orderedRoute[leg.fromIdx]).lng
-      const to = orderedRoute[leg.toIdx].landmark || orderedRoute[leg.toIdx]
-      const walking = await fetchWalkingRoute(fromLat, fromLng, to.lat, to.lng)
-      return { toIdx: leg.toIdx, walking }
+      const fromLat = leg.fromLat ?? (orderedRoute[leg.fromIdx]?.landmark || orderedRoute[leg.fromIdx])?.lat
+      const fromLng = leg.fromLng ?? (orderedRoute[leg.fromIdx]?.landmark || orderedRoute[leg.fromIdx])?.lng
+      const to = orderedRoute[leg.toIdx]?.landmark || orderedRoute[leg.toIdx]
+      if (!fromLat || !to?.lat) return { toIdx: leg.toIdx, route: null }
+      const route = await fetcher(fromLat, fromLng, to.lat, to.lng)
+      return { toIdx: leg.toIdx, route }
     }))
 
-    for (const { toIdx, walking } of results) {
-      if (walking && walking.distance > 0) {
-        orderedRoute[toIdx] = { ...orderedRoute[toIdx], walkingDist: walking.distance / 1000, walkingTime: walking.duration / 60, walkingSteps: walking.steps }
+    for (const { toIdx, route } of results) {
+      if (route && route.distance > 0) {
+        const enriched = {
+          ...orderedRoute[toIdx],
+          walkingDist: route.distance / 1000,
+          walkingTime: route.duration / 60,
+        }
+        // 步行模式保留导航步骤
+        if (transport === 'walk' && route.steps) {
+          enriched.walkingSteps = route.steps
+        }
+        // 地铁模式附上票价
+        if (transport === 'subway' && route.fare != null) {
+          enriched.transitFare = route.fare
+        }
+        orderedRoute[toIdx] = enriched
       }
     }
     return orderedRoute
-  }
+  }, [])
 
   const recordUsedIds = useCallback((orderedRoute) => {
     const newIds = orderedRoute.map((s) => (s.landmark || s).id).filter(Boolean)
@@ -168,6 +197,7 @@ export default function App() {
       const transport = prefs?.transport || 'walk'
       const tConfig = TRANSPORT_CONFIG[transport] || TRANSPORT_CONFIG.walk
       const landmarks = await fetchLandmarksByPosition(coords.lat, coords.lng, tConfig.searchRadius)
+      lastLandmarksRef.current = landmarks  // 保存以备后续换 POI 用
       const result = generateRoute(coords.lat, coords.lng, landmarks, prefs, excludeIds)
 
       if (!result.success) {
@@ -176,18 +206,16 @@ export default function App() {
         return
       }
 
-      // 仅步行模式下用真实步行 API 丰富路径（骑行/打车用 haversine + 速度系数）
-      const isWalkMode = prefs?.transport === 'walk'
-      if (isWalkMode) {
-        result.orderedRoute = await enrichWithWalking(result.orderedRoute, coords.lat, coords.lng)
-        result.summary = computeSummary(result.orderedRoute, prefs)
+      // 用高德真实路径规划 API 替换 haversine 估算值
+      // 所有出行模式都使用各自的真实 API (walk/drive/cycle/subway)
+      result.orderedRoute = await enrichWithDirections(result.orderedRoute, coords.lat, coords.lng, transport)
+      result.summary = computeSummary(result.orderedRoute, prefs)
 
-        // 多天路线：每天也重算
-        if (result.days) {
-          for (const day of result.days) {
-            day.orderedRoute = await enrichWithWalking(day.orderedRoute, coords.lat, coords.lng)
-            day.summary = computeSummary(day.orderedRoute, prefs)
-          }
+      // 多天路线：每天也重算
+      if (result.days) {
+        for (const day of result.days) {
+          day.orderedRoute = await enrichWithDirections(day.orderedRoute, coords.lat, coords.lng, transport)
+          day.summary = computeSummary(day.orderedRoute, prefs)
         }
       }
 
@@ -318,6 +346,107 @@ export default function App() {
     }
   }, [userCoords, preferences, doGenerateRoute])
 
+  // ==================== 换 POI：替换路线中的某个地点 ====================
+  const handleSwapPoi = useCallback((poiIndex, dayIndex = null) => {
+    const landmarks = lastLandmarksRef.current
+    if (!landmarks?.length || !routeData) return
+
+    const pref = preferences || lastPrefsRef.current
+    const speed = TRANSPORT_CONFIG[pref?.transport || 'walk']?.speed || 1.2
+
+    const replaceInRoute = (orderedRoute) => {
+      const target = orderedRoute[poiIndex]
+      const lm = target?.landmark || target
+      if (!lm?.category) return orderedRoute
+
+      // 筛选同类别中未使用的 POI
+      const usedIds = new Set(orderedRoute.map(s => (s.landmark || s).id).filter(Boolean))
+      const sameCat = landmarks.filter(l => l.category === lm.category && !usedIds.has(l.id))
+      if (sameCat.length === 0) return orderedRoute // 没有可换的
+
+      const replacement = weightedRandomPick(sameCat, 1.5)
+      const newOrdered = [...orderedRoute]
+      newOrdered[poiIndex] = replacement
+      return orderByGreedy(newOrdered, lastCoordsRef.current?.lat || 0, lastCoordsRef.current?.lng || 0, speed)
+    }
+
+    let newOrderedRoute, newDays
+
+    if (dayIndex !== null && routeData.days) {
+      newDays = routeData.days.map((day, di) => {
+        if (di !== dayIndex) return day
+        const newOrdered = replaceInRoute(day.orderedRoute)
+        return { ...day, orderedRoute: newOrdered, summary: computeSummary(newOrdered, pref) }
+      })
+      newOrderedRoute = newDays.flatMap(d => d.orderedRoute)
+    } else {
+      newOrderedRoute = replaceInRoute(routeData.orderedRoute)
+    }
+
+    const newSummary = computeSummary(newOrderedRoute, pref)
+    const newRouteData = {
+      orderedRoute: newOrderedRoute,
+      summary: newSummary,
+      days: newDays || routeData.days,
+    }
+    setRouteData(newRouteData)
+
+    // 更新持久化
+    saveRoute({
+      orderedRoute: newOrderedRoute,
+      summary: newSummary,
+      days: newDays || routeData.days,
+      preferences: pref,
+      userCoords: lastCoordsRef.current,
+      locationInfo,
+    })
+  }, [routeData, preferences, locationInfo])
+
+  // ==================== 移动 POI：调整路线顺序 ====================
+  const handleMovePoi = useCallback((fromIndex, direction, dayIndex = null) => {
+    if (!routeData) return
+    const pref = preferences || lastPrefsRef.current
+    const speed = TRANSPORT_CONFIG[pref?.transport || 'walk']?.speed || 1.2
+    const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1
+
+    const moveInRoute = (orderedRoute) => {
+      if (toIndex < 0 || toIndex >= orderedRoute.length) return orderedRoute
+      const arr = [...orderedRoute]
+      ;[arr[fromIndex], arr[toIndex]] = [arr[toIndex], arr[fromIndex]]
+      return orderByGreedy(arr, lastCoordsRef.current?.lat || 0, lastCoordsRef.current?.lng || 0, speed)
+    }
+
+    let newOrderedRoute, newDays
+
+    if (dayIndex !== null && routeData.days) {
+      newDays = routeData.days.map((day, di) => {
+        if (di !== dayIndex) return day
+        const newOrdered = moveInRoute(day.orderedRoute)
+        return { ...day, orderedRoute: newOrdered, summary: computeSummary(newOrdered, pref) }
+      })
+      newOrderedRoute = newDays.flatMap(d => d.orderedRoute)
+    } else {
+      newOrderedRoute = moveInRoute(routeData.orderedRoute)
+    }
+
+    const newSummary = computeSummary(newOrderedRoute, pref)
+    const newRouteData = {
+      orderedRoute: newOrderedRoute,
+      summary: newSummary,
+      days: newDays || routeData.days,
+    }
+    setRouteData(newRouteData)
+
+    saveRoute({
+      orderedRoute: newOrderedRoute,
+      summary: newSummary,
+      days: newDays || routeData.days,
+      preferences: pref,
+      userCoords: lastCoordsRef.current,
+      locationInfo,
+    })
+  }, [routeData, preferences, locationInfo])
+
   // ==================== 渲染 ====================
   return (
     <div className="relative h-full w-full max-w-lg md:max-w-2xl lg:max-w-4xl mx-auto overflow-hidden">
@@ -350,7 +479,15 @@ export default function App() {
               <div className="w-8 h-8 border-2 border-indigo-400/20 border-t-indigo-400/60 rounded-full animate-spin" />
             </div>
           }>
-            <RouteCard routeData={routeData} preferences={preferences} onBack={handleBack} onRegenerate={handleRegenerate} weather={weather} />
+            <RouteCard
+              routeData={routeData}
+              preferences={preferences}
+              onBack={handleBack}
+              onRegenerate={handleRegenerate}
+              weather={weather}
+              onSwapPoi={handleSwapPoi}
+              onMovePoi={handleMovePoi}
+            />
           </Suspense>
         )}
       </div>

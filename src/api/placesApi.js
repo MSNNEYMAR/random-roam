@@ -6,6 +6,7 @@ import { CURRENT_PROVIDER, PROVIDER_CONFIG, CATEGORY_DEFAULTS, DEFAULT_TIPS } fr
 import { fetchFromAmap } from './amapAdapter'
 import { fetchFromGoogle } from './googleAdapter'
 import { TRANSPORT_CONFIG } from '../utils/routeGenerator'
+import { isValidPOI } from '../engine/poiFilter.js'
 
 // ==================== localStorage 历史去重 ====================
 
@@ -133,6 +134,13 @@ export async function fetchLandmarksByPosition(lat, lng, searchRadiusOverride = 
 
   // 标准化（用 index 做 ID，消除模块级可变状态并发隐患）
   let landmarks = rawResults.map((r, idx) => normalizeLandmark(r, r._category, idx))
+
+  // Layer 1 过滤 — 剔除低质量 POI
+  const beforeFilter = landmarks.length
+  landmarks = landmarks.filter(l => isValidPOI(l))
+  if (beforeFilter > landmarks.length) {
+    console.log(`[RandomRoam] POI过滤: ${beforeFilter} → ${landmarks.length} (剔除 ${beforeFilter - landmarks.length} 个低质量POI)`)
+  }
 
   // localStorage 历史去重
   const historyIds = new Set(getHistoryPoiIds())
